@@ -1,0 +1,43 @@
+version: "2"
+
+linters:
+  enable:
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - gocritic
+    - misspell
+    - nilerr
+    - noctx
+    - revive
+    - unconvert
+    - unparam
+    - usetesting
+    - wastedassign
+
+  settings:
+    errcheck:
+      # An election that cannot reach the database is the expected case, so
+      # ignoring an error is occasionally correct here -- but only where the
+      # code says why.
+      check-type-assertions: true
+    revive:
+      rules:
+        - name: exported
+          arguments: [checkPrivateReceivers]
+        - name: package-comments
+
+  exclusions:
+    rules:
+      # Test helpers legitimately take *testing.T and act on it.
+      - path: (harness|storetest)/
+        linters: [revive]
+        text: "unused-parameter"
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt

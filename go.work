@@ -1,0 +1,17 @@
+go 1.23.0
+
+use (
+	.
+	./postgres
+	./tests
+	./tools
+)
+
+// The submodules require the core module by version, as published modules
+// must. Until the core module has a tag those requires cannot resolve, and
+// after it does they would still point at the released copy rather than the
+// working tree. This replace makes the workspace build what is on disk.
+replace (
+	github.com/brualan/leaderelection v0.1.0 => ./
+	github.com/brualan/leaderelection/postgres v0.1.0 => ./postgres
+)

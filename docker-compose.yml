@@ -1,0 +1,89 @@
+# Test infrastructure for the integration suite.
+#
+# Two paths to the same database are exposed on purpose. The acceptance suite
+# runs against both, unchanged, because "works directly but not through the
+# pooler" is the failure mode this library is most likely to have and least
+# likely to notice.
+services:
+  postgres:
+    # Pinned by CI so the suite runs against every supported major version.
+    image: postgres:${POSTGRES_VERSION:-17}-alpine
+    environment:
+      POSTGRES_USER: leaderelection
+      POSTGRES_PASSWORD: leaderelection
+      POSTGRES_DB: leaderelection
+    command:
+      - postgres
+      # Small enough that pooler exhaustion is reachable in a test, large
+      # enough for the direct-connection suite to run alongside it.
+      - -c
+      - max_connections=100
+      - -c
+      - log_min_duration_statement=0
+    ports:
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leaderelection -d leaderelection"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: leaderelection
+      DB_PASSWORD: leaderelection
+      DB_NAME: leaderelection
+      # Transaction pooling is the mode that breaks anything session-scoped,
+      # so it is the mode worth testing.
+      POOL_MODE: transaction
+      AUTH_TYPE: scram-sha-256
+      ADMIN_USERS: leaderelection
+      # Deliberately small: a handful of server connections shared by every
+      # participant is what a real deployment looks like, and it is what makes
+      # pool exhaustion reproducible.
+      MAX_CLIENT_CONN: "200"
+      DEFAULT_POOL_SIZE: "5"
+      MIN_POOL_SIZE: "0"
+      QUERY_WAIT_TIMEOUT: "10"
+      # Named prepared statements are not supported here on purpose: leaving
+      # this at zero proves the store never relies on them.
+      MAX_PREPARED_STATEMENTS: "0"
+    ports:
+      - "127.0.0.1:56432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U leaderelection"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  # Each chaos participant reaches the database through its own proxy, so a
+  # test can cut one node off while the others keep working. That asymmetry is
+  # the whole point: a partition that hits everyone equally cannot produce two
+  # leaders, and a partition that hits one node is exactly what can.
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    command: ["-host", "0.0.0.0", "-config", "/dev/null"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pgbouncer:
+        condition: service_healthy
+    ports:
+      # Control API.
+      - "127.0.0.1:8474:8474"
+      # One published port per participant, direct and pooled. The range is
+      # generous because a scenario with eight participants needs eight of
+      # them, and a suite that reuses ports across scenarios has to wait for
+      # the previous one's connections to go away first.
+      - "127.0.0.1:57000-57063:57000-57063"
+    healthcheck:
+      test: ["CMD", "/toxiproxy-cli", "list"]
+      interval: 1s
+      timeout: 3s
+      retries: 30

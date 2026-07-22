@@ -1,0 +1,10 @@
+# Coverage output.
+.cover/
+*.out
+
+# Build output.
+/bin/
+
+# IDE.
+.idea/
+.vscode/

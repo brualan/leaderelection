@@ -1,0 +1,4 @@
+go test fuzz v1
+[]byte("010\x0519X10\x04x$")
+byte('\x03')
+byte('I')

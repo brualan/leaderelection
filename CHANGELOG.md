@@ -1,0 +1,69 @@
+# Changelog
+
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
+[semantic versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+
+- Leader election over a shared PostgreSQL instance, for replicas spread across
+  clusters that cannot reach each other.
+- Safety through database-side timestamps, conservative local deadlines, and a
+  watchdog that steps down without waiting on the network.
+- Fencing tokens for guarding writes to systems outside the election.
+- `postgres` store, verified against PostgreSQL directly and through PgBouncer
+  in transaction pooling mode.
+- `memstore`, an in-process store for testing applications that use the
+  library.
+- `storetest`, the acceptance suite every store implementation must pass.
+- Chaos suite covering partitions, hung databases, restarts and pooler
+  failures, with a safety oracle that checks leadership intervals for overlap.
+- Chaos scenarios for faults inside the database rather than on the way to it:
+  a table lock, a row lock, terminated backends, a read-only server, and a
+  PostgreSQL killed rather than stopped.
+- Chaos scenarios for one-way blackholes, connection resets mid-query,
+  bandwidth collapse, a flapping path, a total partition, and participants who
+  each read the database's clock as something different.
+- Soak suite behind `make test-soak`: randomised faults with participants being
+  replaced mid-flight, a rolling restart of the whole fleet, more participants
+  than the pooler has server connections, and two elections sharing a table.
+- A simulation of the whole election on virtual time, with per-participant
+  clock *rates*, driving `FuzzElectionUnderFaults`. Safety is sampled at every
+  step of virtual time; liveness is asserted once the faults stop.
+- Fuzz targets for the timing invariant, lease arithmetic, backoff delays,
+  table-name quoting, error classification, and an operation-level model of the
+  store contract that runs against both `memstore` and real PostgreSQL.
+
+### Fixed
+
+Found by review before the first release, so there is nothing to upgrade from.
+They are recorded because each one is a trap the next implementation of this
+idea will walk into.
+
+- A fence token could start a second term. After a local step-down the lease is
+  still valid in the database -- the local deadline is deliberately earlier --
+  so re-acquiring it gave the store no reason to renumber. The lease is now
+  given up first, and the next acquisition mints a fresh token.
+- The timing invariant charged `OperationTimeout` once when the worst case
+  spends it twice: on the renewal that is lost and on the one that has to
+  succeed. Configurations with a long operation timeout passed validation and
+  then flapped.
+- `postgres.Retryable` matched a closed pool by error message, which stopped
+  working the moment the error was wrapped -- which this package always does.
+  It now matches `puddle.ErrClosedPool` through `errors.Is`.
+- `Status` handed out the elector's own payload slice, so one caller's edit
+  surfaced in another's snapshot.
+- A store reporting more time remaining than was asked for could push the local
+  deadline past the lease's real expiry. The granted TTL is now clamped.
+- `Config.Validate` accepted configurations whose renewal budget overflowed a
+  duration: the sum wrapped negative and compared as though there were time to
+  spare, waving through exactly what the check exists to reject. Found by
+  `FuzzConfigValidate`.
+- A backoff delay computed near the top of the duration range converted through
+  a `float64` that rounds *above* the largest `time.Duration`, wrapping to the
+  most negative one. A timer armed with it fires immediately, turning the retry
+  it was pacing into a spin against a database already in trouble. Reachable
+  with a large `LeaseDuration`, since that is the backoff ceiling. Found by
+  `FuzzBackoffNext`.
