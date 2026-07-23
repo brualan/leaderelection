@@ -5,19 +5,20 @@
 ```bash
 git clone https://github.com/brualan/leaderelection
 cd leaderelection
-make up      # PostgreSQL, PgBouncer and Toxiproxy in Docker
+make up      # PostgreSQL, MySQL, their poolers and Toxiproxy in Docker
 make check   # vet, gofmt, golangci-lint, unit tests
 ```
 
 Go 1.23 or newer, plus Docker for anything past `make check`.
 
-The repository is a Go workspace of four modules:
+The repository is a Go workspace of five modules:
 
 | Module | Contents | Dependencies |
 |---|---|---|
 | `.` | the election itself | none, tests included |
 | `./postgres` | the PostgreSQL store | pgx |
-| `./tests` | chaos and end-to-end scenarios | the two above |
+| `./mysql` | the MySQL store | go-sql-driver/mysql |
+| `./tests` | chaos and end-to-end scenarios | the three above |
 | `./tools` | repository tooling | none |
 
 The core module's empty dependency list is a feature, not an accident. A change
@@ -28,7 +29,7 @@ reason. `internal/assert` exists so that the tests need no assertion library.
 
 ```bash
 make test        # unit, simulation and fuzz corpora, race detector, no Docker
-make test-int    # against real PostgreSQL, direct and via PgBouncer
+make test-int    # against real PostgreSQL and MySQL, direct and pooled
 make test-chaos  # partitions, hangs, restarts, locks, pooler failures
 make test-soak   # long randomised runs, rolling restarts, pool exhaustion
 make test-all    # everything except the soak

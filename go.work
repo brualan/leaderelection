@@ -2,6 +2,7 @@ go 1.23.0
 
 use (
 	.
+	./mysql
 	./postgres
 	./tests
 	./tools
@@ -13,5 +14,6 @@ use (
 // working tree. This replace makes the workspace build what is on disk.
 replace (
 	github.com/brualan/leaderelection v0.1.0 => ./
+	github.com/brualan/leaderelection/mysql v0.1.0 => ./mysql
 	github.com/brualan/leaderelection/postgres v0.1.0 => ./postgres
 )

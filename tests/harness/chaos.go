@@ -40,6 +40,36 @@ func NewToxiproxy(t *testing.T, base string) *Toxiproxy {
 	return p
 }
 
+// ResetProxies removes every proxy registered with the toxiproxy at base.
+//
+// Each proxy is deleted when the test that created it ends, which covers a test
+// that fails and not a run that is killed -- a timeout, a ^C, a panic on the
+// wrong goroutine. Those leave proxies holding the published ports, and the
+// next run fails at startup with a bind error that says nothing about what
+// caused it. Clearing the slate before the first scenario is cheaper than
+// diagnosing that twice.
+//
+// It also means one toxiproxy serves one suite at a time: a second suite
+// starting would delete the first one's proxies. They could never have shared
+// it anyway, because they draw from the same published port range.
+func ResetProxies(base string) error {
+	tp := &Toxiproxy{
+		base:   strings.TrimSuffix(base, "/"),
+		client: &http.Client{Timeout: 10 * time.Second},
+	}
+
+	var proxies map[string]json.RawMessage
+	if err := tp.do(http.MethodGet, "/proxies", nil, &proxies); err != nil {
+		return fmt.Errorf("list proxies at %s: %w", base, err)
+	}
+	for name := range proxies {
+		if err := tp.do(http.MethodDelete, "/proxies/"+name, nil, nil); err != nil {
+			return fmt.Errorf("remove stale proxy %s: %w", name, err)
+		}
+	}
+	return nil
+}
+
 // Proxy is one TCP path from the test process to a database endpoint.
 type Proxy struct {
 	tp       *Toxiproxy

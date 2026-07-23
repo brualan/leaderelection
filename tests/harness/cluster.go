@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/brualan/leaderelection"
-	"github.com/brualan/leaderelection/postgres"
 )
 
 // Timings used by the chaos scenarios. They are an order of magnitude tighter
@@ -59,7 +58,7 @@ type Node struct {
 	Identity string
 	Proxy    *Proxy
 	Elector  *leaderelection.Elector
-	Store    *postgres.Store
+	Store    Store
 
 	cancel context.CancelFunc
 	done   chan error
@@ -72,14 +71,21 @@ type Options struct {
 	// no notion of majority -- the database is the only authority.
 	Nodes int
 
+	// Backend is the database the participants share. It defaults to
+	// [PostgresBackend], and it is what decides which store, which DSN and
+	// which compose services a scenario is talking about.
+	Backend *Backend
+
 	// Upstream is the address the proxies forward to, as seen from inside the
-	// toxiproxy container: "postgres:5432" or "pgbouncer:5432".
+	// toxiproxy container: "postgres:5432" or "pgbouncer:5432". It defaults to
+	// the backend's direct address.
 	Upstream string
 
 	// BasePort is the first published proxy port; each node takes the next.
 	BasePort int
 
-	// DSN is a template for the connection string, with %s for host:port.
+	// DSNTemplate overrides the backend's connection string template, with %s
+	// for host:port.
 	DSNTemplate string
 
 	// DisableRelease makes shutdown look like a crash rather than a handover.
@@ -121,19 +127,19 @@ func ComposeFile() string {
 	return "../docker-compose.yml"
 }
 
-// DefaultDSN is the template for reaching the test database through a proxy.
-const DefaultDSN = "postgres://leaderelection:leaderelection@%s/leaderelection?sslmode=disable"
-
 // NewCluster builds and starts a cluster. Every node is running by the time it
 // returns, though none is necessarily leader yet.
 func NewCluster(t *testing.T, opts Options) *Cluster {
 	t.Helper()
 
+	if opts.Backend == nil {
+		opts.Backend = PostgresBackend
+	}
 	if opts.DSNTemplate == "" {
-		opts.DSNTemplate = DefaultDSN
+		opts.DSNTemplate = opts.Backend.DSNTemplate
 	}
 	if opts.Upstream == "" {
-		opts.Upstream = "postgres:5432"
+		opts.Upstream = opts.Backend.Direct
 	}
 	if opts.LeaseDuration == 0 {
 		opts.LeaseDuration = LeaseDuration
@@ -169,8 +175,8 @@ func (c *Cluster) ensureSchema(t *testing.T, opts Options) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	dsn := fmt.Sprintf(opts.DSNTemplate, "127.0.0.1:55432")
-	store, err := postgres.Connect(ctx, dsn)
+	dsn := fmt.Sprintf(opts.DSNTemplate, opts.Backend.Admin)
+	store, err := opts.Backend.Open(ctx, dsn)
 	if err != nil {
 		t.Fatalf("connect for schema setup: %v", err)
 	}
@@ -188,7 +194,7 @@ func (c *Cluster) startNode(ctx context.Context, opts Options, i int) *Node {
 		fmt.Sprintf("%s-%s", c.Election, name), opts.BasePort+i, opts.Upstream)
 	proxy.ClearToxics(c.t)
 
-	store, err := postgres.Connect(ctx, fmt.Sprintf(opts.DSNTemplate, proxy.Listen))
+	store, err := opts.Backend.Open(ctx, fmt.Sprintf(opts.DSNTemplate, proxy.Listen))
 	if err != nil {
 		c.t.Fatalf("%s: connect: %v", name, err)
 	}

@@ -1,0 +1,47 @@
+# ProxySQL in front of the test MySQL, so the acceptance suite can run over a
+# pooled route as well as a direct one. It is the MySQL counterpart of the
+# PgBouncer service: a small shared pool of backend connections that every
+# participant contends for.
+datadir="/var/lib/proxysql"
+
+admin_variables=
+{
+    admin_credentials="admin:admin"
+    mysql_ifaces="0.0.0.0:6032"
+}
+
+mysql_variables=
+{
+    threads=2
+    max_connections=2048
+    interfaces="0.0.0.0:6033"
+    default_schema="leaderelection"
+    stacksize=1048576
+    server_version="8.0.36"
+    connect_timeout_server=3000
+    monitor_username="monitor"
+    monitor_password="monitor"
+    monitor_ping_interval=10000
+    monitor_connect_interval=10000
+    monitor_read_only_interval=10000
+}
+
+mysql_servers=
+(
+    # Small enough that every participant is sharing a handful of backend
+    # connections, which is what a real deployment looks like. Not as small as
+    # PgBouncer's pool, because the two poolers behave differently when they run
+    # out: PgBouncer queues the client until QUERY_WAIT_TIMEOUT, while ProxySQL
+    # reports error 9001 and lets the client decide. Sized so that the suite
+    # exercises sharing rather than exhaustion; the soak scenarios reach
+    # exhaustion on purpose, by adding participants.
+    { address="mysql", port=3306, hostgroup=0, max_connections=50 }
+)
+
+mysql_users=
+(
+    { username="leaderelection", password="leaderelection", default_hostgroup=0, default_schema="leaderelection", transaction_persistent=1, active=1 }
+)
+
+mysql_query_rules=()
+mysql_replication_hostgroups=()

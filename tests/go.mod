@@ -6,7 +6,12 @@ go 1.23.0
 
 require (
 	github.com/brualan/leaderelection v0.1.0
+	github.com/brualan/leaderelection/mysql v0.1.0
 	github.com/brualan/leaderelection/postgres v0.1.0
+	github.com/go-sql-driver/mysql v1.9.3
 )
 
-require github.com/jackc/pgx/v5 v5.7.6 // indirect
+require (
+	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/jackc/pgx/v5 v5.7.6 // indirect
+)

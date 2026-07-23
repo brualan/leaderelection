@@ -62,6 +62,54 @@ services:
       timeout: 3s
       retries: 30
 
+  # The same two routes again, for the other supported database. The store is a
+  # different implementation with different SQL, and the acceptance suite it has
+  # to pass is the same one.
+  mysql:
+    # Pinned by CI so the suite runs against every supported major version.
+    image: mysql:${MYSQL_VERSION:-8.0}
+    command:
+      - --max_connections=200
+      # The suite writes the same row several times a second for minutes at a
+      # time and does not care whether the container survives a power cut.
+      - --innodb-flush-log-at-trx-commit=2
+      # The lock a scenario takes has to outlast the lease it is testing, and
+      # the default would let the server break it first.
+      - --innodb-lock-wait-timeout=50
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: leaderelection
+      MYSQL_PASSWORD: leaderelection
+      MYSQL_DATABASE: leaderelection
+    volumes:
+      - ./docker/mysql-init.sql:/docker-entrypoint-initdb.d/10-users.sql:ro
+    ports:
+      - "127.0.0.1:53306:3306"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u leaderelection -pleaderelection --silent"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
+  proxysql:
+    image: proxysql/proxysql:2.6.6
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # --initial makes the container read the config file on every start rather
+    # than the SQLite database a previous run left behind, so the pooler a test
+    # gets is the one this repository describes.
+    command: ["proxysql", "-f", "-c", "/etc/proxysql.cnf", "--initial", "--idle-threads"]
+    volumes:
+      - ./docker/proxysql.cnf:/etc/proxysql.cnf:ro
+    ports:
+      - "127.0.0.1:56033:6033"
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -P 6033 -u leaderelection -pleaderelection --silent"]
+      interval: 1s
+      timeout: 5s
+      retries: 60
+
   # Each chaos participant reaches the database through its own proxy, so a
   # test can cut one node off while the others keep working. That asymmetry is
   # the whole point: a partition that hits everyone equally cannot produce two
@@ -74,6 +122,10 @@ services:
         condition: service_healthy
       pgbouncer:
         condition: service_healthy
+      mysql:
+        condition: service_healthy
+      proxysql:
+        condition: service_healthy
     ports:
       # Control API.
       - "127.0.0.1:8474:8474"
@@ -81,7 +133,15 @@ services:
       # generous because a scenario with eight participants needs eight of
       # them, and a suite that reuses ports across scenarios has to wait for
       # the previous one's connections to go away first.
-      - "127.0.0.1:57000-57063:57000-57063"
+      #
+      # It sits below 32768 on purpose. Linux hands out ephemeral ports from
+      # 32768-60999, and this container spends the whole suite opening
+      # connections to the database -- so a range inside that window would
+      # occasionally find one of its own outbound connections already sitting
+      # on the port a scenario was about to listen on. The failure is a bind
+      # error at startup, minutes from the connection that caused it, and it
+      # looks exactly like a leftover proxy.
+      - "127.0.0.1:17000-17063:17000-17063"
     healthcheck:
       test: ["CMD", "/toxiproxy-cli", "list"]
       interval: 1s

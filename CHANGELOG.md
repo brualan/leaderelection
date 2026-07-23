@@ -8,13 +8,20 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
-- Leader election over a shared PostgreSQL instance, for replicas spread across
-  clusters that cannot reach each other.
+- Leader election over a shared PostgreSQL or MySQL instance, for replicas
+  spread across clusters that cannot reach each other.
 - Safety through database-side timestamps, conservative local deadlines, and a
   watchdog that steps down without waiting on the network.
 - Fencing tokens for guarding writes to systems outside the election.
 - `postgres` store, verified against PostgreSQL directly and through PgBouncer
   in transaction pooling mode.
+- `mysql` store, verified against MySQL 8.0 and 8.4 directly and through
+  ProxySQL. MySQL has no `RETURNING`, so `Acquire` and `Renew` write and then
+  read the row back; a lease is reported as held only when that read says so,
+  which keeps a race between the two statements on the safe side. Identities are
+  stored as `VARBINARY` because MySQL's default collations would otherwise make
+  two distinct participants compare equal, and timestamps are `DATETIME(6)`
+  holding `UTC_TIMESTAMP(6)` so that nothing depends on a session time zone.
 - `memstore`, an in-process store for testing applications that use the
   library.
 - `storetest`, the acceptance suite every store implementation must pass.
@@ -23,6 +30,10 @@ All notable changes to this project are documented here. The format follows
 - Chaos scenarios for faults inside the database rather than on the way to it:
   a table lock, a row lock, terminated backends, a read-only server, and a
   PostgreSQL killed rather than stopped.
+- The same chaos scenarios against MySQL and ProxySQL, plus two that only mean
+  something for a store whose operations are two statements: a leader whose
+  renewals commit but whose replies never arrive, and connections that reset
+  between the write and the read-back.
 - Chaos scenarios for one-way blackholes, connection resets mid-query,
   bandwidth collapse, a flapping path, a total partition, and participants who
   each read the database's clock as something different.
@@ -33,8 +44,9 @@ All notable changes to this project are documented here. The format follows
   clock *rates*, driving `FuzzElectionUnderFaults`. Safety is sampled at every
   step of virtual time; liveness is asserted once the faults stop.
 - Fuzz targets for the timing invariant, lease arithmetic, backoff delays,
-  table-name quoting, error classification, and an operation-level model of the
-  store contract that runs against both `memstore` and real PostgreSQL.
+  table-name quoting, error classification, MySQL timestamp decoding, and an
+  operation-level model of the store contract that runs against `memstore` and
+  against both real databases.
 
 ### Fixed
 

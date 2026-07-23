@@ -32,8 +32,8 @@ server knows the other exists. The replicas still have exactly one thing in
 common — the database they were already talking to. So that is where the
 election happens.
 
-This library elects one leader among processes that share a PostgreSQL (or,
-soon, MySQL) instance and nothing else. No etcd, no ZooKeeper, no Consul, no
+This library elects one leader among processes that share a PostgreSQL or MySQL
+instance and nothing else. No etcd, no ZooKeeper, no Consul, no
 extra thing to operate. A table with one row per election.
 
 It is built for the awkward version of that deployment: participants on the far
@@ -95,7 +95,7 @@ to believe a lease longer than the one it asked for.
 
 ```bash
 go get github.com/brualan/leaderelection
-go get github.com/brualan/leaderelection/postgres
+go get github.com/brualan/leaderelection/postgres   # or .../mysql
 ```
 
 The core module has **no dependencies** — standard library only, tests included.
@@ -172,16 +172,33 @@ if elector.IsLeader() {
 }
 ```
 
-### Behind PgBouncer
+### On MySQL
+
+Swap the import and the constructor; nothing else in the program changes.
+
+```go
+import "github.com/brualan/leaderelection/mysql"
+
+store, err := mysql.Connect(ctx, "user:pass@tcp(db:3306)/app")
+```
+
+It works on MySQL 8.0 and later and on MariaDB 10.5 and later, directly or
+through a pooler such as ProxySQL, and it passes the same acceptance suite as
+the PostgreSQL store with no exemptions. Two differences are worth knowing
+about, and both are in [MySQL](#mysql) below: an operation costs two round trips
+instead of one, and the table stores identities as binary.
+
+### Behind a connection pooler
 
 Nothing changes:
 
 ```go
 store, err := postgres.Connect(ctx, "postgres://user:pass@pgbouncer:6432/app")
+store, err := mysql.Connect(ctx, "user:pass@tcp(proxysql:6033)/app")
 ```
 
 `Connect` configures the pool to survive transaction pooling by default. See
-[PgBouncer](#pgbouncer) for what that means and why.
+[PgBouncer](#pgbouncer) and [MySQL](#mysql) for what that means and why.
 
 ## Schema
 
@@ -212,6 +229,23 @@ One row per election; unrelated elections share the table. Use
 times a minute, forever — and leaving room on the page keeps those updates HOT,
 so the primary key index is untouched and autovacuum can reclaim old versions
 without an index scan.
+
+On MySQL the table is the same shape with different types:
+
+```sql
+CREATE TABLE IF NOT EXISTS leader_election (
+    name        VARBINARY(255) NOT NULL,
+    holder      VARBINARY(255) NOT NULL,
+    fence       BIGINT         NOT NULL,
+    acquired_at DATETIME(6)    NOT NULL,
+    renewed_at  DATETIME(6)    NOT NULL,
+    expires_at  DATETIME(6)    NOT NULL,
+    payload     BLOB           NULL,
+    PRIMARY KEY (name)
+) ENGINE=InnoDB;
+```
+
+`mysql.Schema` and `mysql.WithTable` are the counterparts of the calls above.
 
 ## Configuration
 
@@ -321,12 +355,13 @@ proxyTo(status.Leader, status.LeaderPayload)
 | Leader is killed with SIGKILL | Successor waits out the lease | ≈ `LeaseDuration` |
 | Leader shuts down cleanly | Releases; successor takes over at once | ≈ `RetryPeriod` |
 | Lease taken by someone else | Steps down on the failed renewal, not at the deadline | ≈ `RenewInterval` |
-| Table missing, no privileges | Nobody leads; `postgres.Fatal(err)` reports it | until fixed |
+| Table missing, no privileges | Nobody leads; `Fatal(err)` reports it | until fixed |
 
 Errors never come back from `Run`. They are reported through
 `Status().LastError` and handled by giving up leadership rather than by giving
-up. `postgres.Retryable` and `postgres.Fatal` classify them for alerting: both
-stop the election, but only one will fix itself.
+up. `postgres.Retryable`/`postgres.Fatal` and `mysql.Retryable`/`mysql.Fatal`
+classify them for alerting: both stop the election, but only one will fix
+itself.
 
 ## PgBouncer
 
@@ -357,6 +392,44 @@ The acceptance suite runs **unchanged** against both paths, with
 not through the pooler" is this library's likeliest bug, and the tests are
 arranged so it cannot hide.
 
+## MySQL
+
+The MySQL store makes the same promises and passes the same acceptance suite.
+Three things about it are worth knowing before you deploy it.
+
+**An operation is two statements.** MySQL has no `RETURNING`, so `Acquire` and
+`Renew` write and then read the row back — two round trips instead of one, and
+`OperationTimeout` has to cover both. The safety argument does not change,
+because a lease is reported as held only when the read-back says it is held,
+never because the write succeeded. A race between the two can only ever
+understate the caller's standing, and understating it is the safe direction.
+
+**Identities are compared as bytes.** `name` and `holder` are `VARBINARY`, not
+text. MySQL's default collations fold case, ignore accents and pad trailing
+spaces, so on a text column `worker-a` and `worker-A` would be the same
+participant — and the guard on every renewal would be looser than identity. The
+suite has a scenario for each of those three, and they are the reason the column
+type looks the way it does.
+
+**Timestamps are `DATETIME(6)` holding UTC.** `TIMESTAMP` is converted using the
+session's time zone, so a fleet whose connections disagreed about it would be
+reading each other's timestamps shifted. Every statement takes its time from
+`UTC_TIMESTAMP(6)`, which does not depend on the session at all. The store reads
+the values whether or not your DSN set `parseTime`, so it works over a `*sql.DB`
+the application already owns.
+
+Everything the [PgBouncer](#pgbouncer) section says about session state applies
+here too, in the MySQL dialect: no `GET_LOCK`, no user variables, no `SET`, no
+temporary tables, no transactions, and no server-side prepared statements —
+`Connect` interpolates parameters instead, which the integration suite verifies
+by counting `Com_stmt_prepare` on the server after an election has run.
+
+One implementation detail deserves a warning because it is invisible: the upsert
+behind `Acquire` depends on MySQL evaluating assignments left to right, with a
+later one seeing what an earlier one wrote. That is documented behaviour and the
+integration suite asserts it against the live server, so a version that changed
+it would fail loudly rather than quietly stop handing over leadership.
+
 ## Testing
 
 Every production package is at **100% statement coverage**, enforced in CI. The
@@ -366,7 +439,7 @@ exclusion is per package, never per line.
 
 ```bash
 make test        # unit, simulation and fuzz corpora, race detector, no Docker
-make test-int    # against real PostgreSQL, direct and via PgBouncer
+make test-int    # against real PostgreSQL and MySQL, direct and pooled
 make test-chaos  # partitions, hangs, restarts, locks, pooler failures
 make test-soak   # long randomised runs, rolling restarts, pool exhaustion
 make fuzz        # explore each fuzz target (FUZZTIME=5m for a longer look)
@@ -392,9 +465,9 @@ anyone has not survived anything.
 
 **Fuzz targets** cover the arithmetic the safety argument rests on: the timing
 invariant that decides which configurations are accepted, the lease duration
-maths, the backoff delays, the quoting of a table name, and an operation-level
-model of the store contract that runs against both the in-memory reference and
-real PostgreSQL. Their seed corpora run as ordinary tests, so every `go test`
+maths, the backoff delays, the quoting of a table name, the decoding of a
+MySQL timestamp, and an operation-level model of the store contract that runs
+against the in-memory reference and against both real databases. Their seed corpora run as ordinary tests, so every `go test`
 replays them.
 
 **The acceptance suite** (`storetest`) pins down store semantics — atomic
@@ -431,6 +504,28 @@ that fence tokens never go backwards.
 | `TestDatabaseGoesReadOnly` | writes fail with 25006, reads do not |
 | `TestPostgresIsKilled` | `SIGKILL` and crash recovery |
 | `TestRandomisedSoak` | a minute of randomly injected faults |
+
+The MySQL store gets the same treatment against MySQL and ProxySQL, plus two
+scenarios that only mean something for a store whose operations are two
+statements:
+
+| Scenario | What breaks |
+|---|---|
+| `TestMySQLSteadyState` | nothing — the baseline |
+| `TestMySQLLeaderIsPartitioned` | the leader's path is severed, others keep theirs |
+| `TestMySQLLeaderIsBlackholed` | packets stop moving; connections stay up |
+| `TestMySQLLeaderSeesNoReplies` | renewals commit; the answers never come back |
+| `TestMySQLConnectionsDieMidOperation` | connections RST between the write and the read-back |
+| `TestMySQLTableIsLocked` | `LOCK TABLES ... WRITE`, as a migration takes it |
+| `TestMySQLElectionRowIsLocked` | reads work, the row cannot be written |
+| `TestMySQLSessionsAreKilled` | `KILL`, as a failover does |
+| `TestMySQLGoesReadOnly` | writes fail with 1290, reads do not |
+| `TestMySQLIsPaused` | `SIGSTOP` on MySQL, connections intact |
+| `TestMySQLIsKilled` | `SIGKILL` and InnoDB crash recovery |
+| `TestProxySQLRestarts` | the pooler bounced under live clients |
+| `TestMySQLLeaderCrashes` | the leader dies without releasing |
+| `TestMySQLGracefulHandoverIsFast` | a clean shutdown, measuring failover |
+| `TestMySQLParticipantsSeeDifferentDatabaseClocks` | each participant is days out, differently |
 
 Most run against both the direct and the pooled path. Longer scenarios live
 behind `make test-soak`: a randomised soak that also replaces participants

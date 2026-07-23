@@ -261,6 +261,17 @@ func TestHighLatencyIsSurvivable(t *testing.T) {
 
 // A long run with faults arriving at random, which is the only way to reach
 // interleavings a scripted scenario never produces.
+//
+// The schedule is random; the assertion at the bottom must not be. Left
+// entirely to chance, most rounds fault one of the three idle followers, and
+// most of the faults that do land on the leader are shorter than the lease it
+// is allowed to keep -- so a run could end with leadership never having changed
+// hands, and the check for that would fire having found nothing wrong. Every
+// third round therefore aims at whoever holds the lease and holds the fault
+// past the point where that participant has to give it up, which makes
+// handovers a property of the schedule rather than of luck. The rounds in
+// between are as random as they ever were, and they are the ones doing the
+// exploring.
 func TestRandomisedSoak(t *testing.T) {
 	if testing.Short() {
 		t.Skip("soak test skipped in short mode")
@@ -269,7 +280,11 @@ func TestRandomisedSoak(t *testing.T) {
 	c := newCluster(t, "pgbouncer:5432", 4)
 	c.AwaitLeader(t, 30*time.Second)
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// Logged so that a failure can be replayed. The schedule is this test's
+	// input, and an input nobody can reproduce is not much of a bug report.
+	seed := time.Now().UnixNano()
+	t.Logf("fault schedule seed: %d", seed)
+	rng := rand.New(rand.NewSource(seed))
 	deadline := time.Now().Add(60 * time.Second)
 
 	// The invariant is sampled continuously in the background while faults
@@ -289,7 +304,17 @@ func TestRandomisedSoak(t *testing.T) {
 		}
 	}()
 
-	for time.Now().Before(deadline) {
+	for round := 0; time.Now().Before(deadline); round++ {
+		if round%3 == 0 {
+			if leader := c.Leader(t); leader != nil {
+				unseat(t, rng, leader)
+				continue
+			}
+			// Nobody holds the lease at this instant, which means a handover is
+			// already under way -- there is nothing to unseat, and a random
+			// round is a perfectly good way to spend the time until it settles.
+		}
+
 		node := c.Nodes[rng.Intn(len(c.Nodes))]
 		switch rng.Intn(4) {
 		case 0:

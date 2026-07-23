@@ -54,7 +54,11 @@ func TestSoakWithChurn(t *testing.T) {
 
 	c.AwaitLeader(t, 30*time.Second)
 
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	// Logged so that a failure can be replayed. The schedule is this test's
+	// input, and an input nobody can reproduce is not much of a bug report.
+	seed := time.Now().UnixNano()
+	t.Logf("fault schedule seed: %d", seed)
+	rng := rand.New(rand.NewSource(seed))
 	deadline := time.Now().Add(soakDuration(t))
 
 	// The invariant is sampled continuously in the background while faults come
