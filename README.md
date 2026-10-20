@@ -343,6 +343,57 @@ status := elector.Status()
 proxyTo(status.Leader, status.LeaderPayload)
 ```
 
+## Metrics
+
+`elector.Metrics()` returns a copied, concurrency-safe snapshot without database
+I/O, callbacks, or a Prometheus dependency. Collect it at scrape time. Every
+field in [`metrics.go`](metrics.go) documents its meaning, recommended metric
+type, and limitations; [`metrics_example_test.go`](metrics_example_test.go)
+shows a minimal exporter mapping.
+
+```go
+m := elector.Metrics()
+// Export booleans as gauge samples: false=0, true=1.
+// Export cumulative totals directly as counter samples; do not Add the whole
+// total to an exporter-owned Counter on each scrape.
+// Export all durations in seconds (already converted in the snapshot).
+```
+
+| Data | Export / interpretation |
+|---|---|
+| `Running`, `IsLeader` | gauges; a healthy follower is running without being leader |
+| `LeaseRemainingSeconds` | gauge, time to conservative local step-down; zero for followers |
+| `HasObservation`, `ObservationAgeSeconds` | omit age until the presence flag is true; observations also include foreign/expired leases |
+| `HasSuccessfulRenewal`, `LastSuccessfulRenewalAgeSeconds` | gauges for the last installed term; promotion clears these, acquisition is not a renewal |
+| `HasError` | advisory gauge; cleared by successful observation, so it cannot count transient errors |
+| `LeaderWorkActive`, `LeaderWorkCanceled` | gauges; sustained canceled-but-active work exposes a callback slow to stop |
+| `TermsStartedTotal`, `TermsEndedTotal` | local counters for term churn; step-down does not mean application work has returned |
+| `LeaseLossesTotal`, `LocalExpirationsTotal` | counters distinguishing lease loss from local failure to confirm in time |
+| `RenewalsAcceptedTotal` | counter of confirmations accepted for a locally live term, not merely nil Store errors |
+| `LeaderChangesObservedTotal` | local counter including first observation; summing replicas double-counts shared handovers |
+| `Store.Inspect/Acquire/Renew/Release` | completed calls, operational errors, timeouts, cancellations, expected outcomes, in-flight calls, duration sum and last duration |
+
+Counters live for the lifetime of the Elector, including repeated `Run` calls.
+A new Elector resets them. Store timeouts are a subset of operational errors;
+ordinary cancellation, `ErrNoLease`, and `ErrLeaseLost` have separate counters.
+A lost Acquire returning another holder with no error is normal contention.
+Use the fixed operation label `inspect`, `acquire`, `renew`, or `release`.
+Keep election labels bounded; do not label metrics with fence tokens, changing
+identities, payloads, or error messages. Use `Status()` and logs for those.
+
+For latency, `rate(duration_seconds_total) / rate(calls_total)` provides a mean
+when there are completed calls. Neither this aggregate nor the latest duration
+provides p95/p99: wrap Store with your existing histogram instrumentation if
+those quantiles are needed. Snapshot collection itself does not register an
+HTTP endpoint or any exporter.
+
+Alert on sustained expiry/error rates, exhausted lease headroom, or canceled
+leader work remaining active. Choose durations from your election settings and
+expected failover window; do not treat a follower or a short no-leader handover
+as a process failure. Scrapes of replicas are not simultaneous, so a transient
+sum of two `IsLeader` samples is not proof of split brain. Metrics are for
+monitoring: retain callback cancellation and receiver-side fencing for work.
+
 ## Failure modes
 
 | What happens | What the library does | How long |

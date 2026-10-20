@@ -78,6 +78,9 @@ type Elector struct {
 	observedPayload []byte
 	observedAt      time.Time
 	lastErr         error
+	// Metrics counters and outstanding application callback, guarded by mu.
+	metrics    metricCounters
+	leaderWork *term
 }
 
 // term is a single leadership term.
@@ -286,6 +289,9 @@ func (e *Elector) promote(ctx context.Context, lease Lease, sentAt time.Time) *t
 		return nil
 	}
 	e.term = t
+	e.leaderWork = t
+	e.metrics.termsStarted++
+	e.metrics.lastRenewalAt = time.Time{}
 	e.spentFence = lease.Fence
 	e.mu.Unlock()
 
@@ -294,7 +300,14 @@ func (e *Elector) promote(ctx context.Context, lease Lease, sentAt time.Time) *t
 
 	go e.watch(t)
 	go func() {
-		defer close(t.done)
+		defer func() {
+			e.mu.Lock()
+			if e.leaderWork == t {
+				e.leaderWork = nil
+			}
+			e.mu.Unlock()
+			close(t.done)
+		}()
 		if e.cfg.Callbacks.OnStartedLeading != nil {
 			e.cfg.Callbacks.OnStartedLeading(t.ctx, t.fence)
 		}
@@ -405,7 +418,8 @@ func (e *Elector) lead(ctx context.Context, t *term) {
 func (e *Elector) extend(t *term, lease Lease, sentAt time.Time) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.term != t || t.ctx.Err() != nil || !e.leadingAtLocked(e.clock.Now()) {
+	now := e.clock.Now()
+	if e.term != t || t.ctx.Err() != nil || !e.leadingAtLocked(now) {
 		// A delayed watchdog must not allow a renewal to resurrect a term
 		// which callers have already observed as expired.
 		return false
@@ -421,6 +435,8 @@ func (e *Elector) extend(t *term, lease Lease, sentAt time.Time) bool {
 	if d := sentAt.Add(granted); d.After(t.deadline) {
 		t.deadline = d
 	}
+	e.metrics.renewalsAccepted++
+	e.metrics.lastRenewalAt = now
 	return true
 }
 
@@ -428,12 +444,21 @@ func (e *Elector) extend(t *term, lease Lease, sentAt time.Time) bool {
 // application's context is cancelled. It is idempotent and safe to call from
 // any goroutine.
 func (e *Elector) stepDown(t *term, reason error) {
+	lost := errors.Is(reason, ErrLeaseLost)
+	expired := errors.Is(reason, ErrLeaseExpiredLocally)
 	e.mu.Lock()
 	if e.term != t {
 		e.mu.Unlock()
 		return
 	}
 	e.term = nil
+	e.metrics.termsEnded++
+	switch {
+	case lost:
+		e.metrics.leaseLosses++
+	case expired:
+		e.metrics.localExpirations++
+	}
 	t.reason = reason
 	if reason != nil {
 		e.lastErr = reason
@@ -485,6 +510,9 @@ func (e *Elector) endTerm(ctx context.Context, t *term) {
 func (e *Elector) observe(lease Lease) {
 	e.mu.Lock()
 	changed := e.observedLeader != lease.Holder || e.observedFence != lease.Fence
+	if changed {
+		e.metrics.leaderChangesObserved++
+	}
 	e.observedLeader = lease.Holder
 	e.observedFence = lease.Fence
 	// The lease came from a store, and a store implementation is free to

@@ -10,28 +10,36 @@ import (
 // watchdog would still step us down safely, but we would never get the chance
 // to recover the lease we were entitled to keep.
 
-func (e *Elector) inspect(ctx context.Context) (Lease, error) {
+func (e *Elector) inspect(ctx context.Context) (lease Lease, err error) {
+	started := e.startOperation(&e.metrics.store.Inspect)
+	defer func() { e.finishOperation(&e.metrics.store.Inspect, started, err) }()
 	opCtx, cancel := e.clock.WithTimeout(ctx, e.cfg.OperationTimeout)
 	defer cancel()
-	lease, err := e.cfg.Store.Inspect(opCtx, e.cfg.Name)
+	lease, err = e.cfg.Store.Inspect(opCtx, e.cfg.Name)
 	return lease, opError(opCtx, err)
 }
 
-func (e *Elector) acquire(ctx context.Context) (Lease, error) {
+func (e *Elector) acquire(ctx context.Context) (lease Lease, err error) {
+	started := e.startOperation(&e.metrics.store.Acquire)
+	defer func() { e.finishOperation(&e.metrics.store.Acquire, started, err) }()
 	opCtx, cancel := e.clock.WithTimeout(ctx, e.cfg.OperationTimeout)
 	defer cancel()
-	lease, err := e.cfg.Store.Acquire(opCtx, e.cfg.Name, e.cfg.Identity, e.cfg.LeaseDuration, e.cfg.Payload)
+	lease, err = e.cfg.Store.Acquire(opCtx, e.cfg.Name, e.cfg.Identity, e.cfg.LeaseDuration, e.cfg.Payload)
 	return lease, opError(opCtx, err)
 }
 
-func (e *Elector) renew(ctx context.Context, fence int64) (Lease, error) {
+func (e *Elector) renew(ctx context.Context, fence int64) (lease Lease, err error) {
+	started := e.startOperation(&e.metrics.store.Renew)
+	defer func() { e.finishOperation(&e.metrics.store.Renew, started, err) }()
 	opCtx, cancel := e.clock.WithTimeout(ctx, e.cfg.OperationTimeout)
 	defer cancel()
-	lease, err := e.cfg.Store.Renew(opCtx, e.cfg.Name, e.cfg.Identity, fence, e.cfg.LeaseDuration, e.cfg.Payload)
+	lease, err = e.cfg.Store.Renew(opCtx, e.cfg.Name, e.cfg.Identity, fence, e.cfg.LeaseDuration, e.cfg.Payload)
 	return lease, opError(opCtx, err)
 }
 
-func (e *Elector) release(ctx context.Context, fence int64) error {
+func (e *Elector) release(ctx context.Context, fence int64) (err error) {
+	started := e.startOperation(&e.metrics.store.Release)
+	defer func() { e.finishOperation(&e.metrics.store.Release, started, err) }()
 	opCtx, cancel := e.clock.WithTimeout(ctx, e.cfg.OperationTimeout)
 	defer cancel()
 	return opError(opCtx, e.cfg.Store.Release(opCtx, e.cfg.Name, e.cfg.Identity, fence))
