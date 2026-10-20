@@ -62,6 +62,11 @@ fuzz: ## Explore each fuzz target for FUZZTIME (default 30s, needs no Docker).
 		done) || exit 1; \
 	done
 
+.PHONY: fuzz-int
+fuzz-int: up ## Fuzz the store contract through real PgBouncer and ProxySQL.
+	go test -tags=integration -run '^$$' -fuzz '^FuzzStore$$' -fuzztime $(FUZZTIME) -parallel=2 ./postgres/...
+	go test -tags=integration -run '^$$' -fuzz '^FuzzStore$$' -fuzztime $(FUZZTIME) -parallel=2 ./mysql/...
+
 .PHONY: cover
 cover: up ## Merge unit and integration coverage and enforce the floor.
 	@rm -rf $(COVERDIR) && mkdir -p $(COVERDIR)

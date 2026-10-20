@@ -36,6 +36,11 @@ make test-all    # everything except the soak
 make cover       # merged profiles with a 100% floor
 ```
 
+Do not run chaos or soak suites concurrently against the same Toxiproxy.
+Each suite clears existing proxies at startup, and database faults affect the
+whole shared infrastructure. To compile tagged tests without touching running
+scenarios, use `go test -c -tags=chaos -o /tmp/leaderelection-chaos.test ./tests`.
+
 `make test-chaos` takes a few minutes; the soak scenario alone runs for a
 minute. `go test -short` skips it.
 
@@ -43,6 +48,7 @@ minute. `go test -short` skips it.
 
 ```bash
 make fuzz                 # every target for 30s each
+make fuzz-int             # store model through real PgBouncer and ProxySQL
 FUZZTIME=5m make fuzz     # a longer look
 LEADERELECTION_SOAK_DURATION=30m make test-soak
 ```

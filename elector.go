@@ -270,7 +270,7 @@ func (e *Elector) promote(ctx context.Context, lease Lease, sentAt time.Time) *t
 	// bound keeps our deadline strictly ahead of the real expiry.
 	t := &term{
 		fence:    lease.Fence,
-		deadline: sentAt.Add(lease.TTL()),
+		deadline: sentAt.Add(min(lease.TTL(), e.cfg.LeaseDuration)),
 		done:     make(chan struct{}),
 	}
 	// Deriving from ctx means a cancelled Run tears the term down without
@@ -278,6 +278,13 @@ func (e *Elector) promote(ctx context.Context, lease Lease, sentAt time.Time) *t
 	t.ctx, t.cancel = context.WithCancel(ctx)
 
 	e.mu.Lock()
+	// The response (or OnNewLeader callback) may have consumed the entire
+	// useful lease. Never start application work on that stale confirmation.
+	if ctx.Err() != nil || !e.clock.Now().Before(t.deadline.Add(-e.cfg.SafetyMargin)) {
+		e.mu.Unlock()
+		t.cancel()
+		return nil
+	}
 	e.term = t
 	e.spentFence = lease.Fence
 	e.mu.Unlock()
@@ -357,7 +364,15 @@ func (e *Elector) lead(ctx context.Context, t *term) {
 				return
 			}
 			e.observe(lease)
-			e.extend(t, lease, sentAt)
+			if !e.extend(t, lease, sentAt) {
+				// An orderly shutdown can race with a successful reply. Keep
+				// its normal teardown (including release), and preserve any
+				// reason already recorded by the watchdog.
+				if t.ctx.Err() == nil {
+					e.stepDown(t, ErrLeaseExpiredLocally)
+				}
+				return
+			}
 			timer.Reset(e.cfg.RenewInterval)
 
 		case errors.Is(err, ErrLeaseLost):
@@ -385,12 +400,15 @@ func (e *Elector) lead(ctx context.Context, t *term) {
 	}
 }
 
-// extend moves the term deadline out after a confirmed renewal.
-func (e *Elector) extend(t *term, lease Lease, sentAt time.Time) {
+// extend moves a still-live term's deadline out after a confirmed renewal.
+// False means the caller must finish teardown rather than continue renewing.
+func (e *Elector) extend(t *term, lease Lease, sentAt time.Time) bool {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.term != t {
-		return
+	if e.term != t || t.ctx.Err() != nil || !e.leadingAtLocked(e.clock.Now()) {
+		// A delayed watchdog must not allow a renewal to resurrect a term
+		// which callers have already observed as expired.
+		return false
 	}
 	// Never trust a TTL longer than the one we asked for. A store that
 	// reported an inflated remaining time -- through a bug, or a clock the
@@ -403,6 +421,7 @@ func (e *Elector) extend(t *term, lease Lease, sentAt time.Time) {
 	if d := sentAt.Add(granted); d.After(t.deadline) {
 		t.deadline = d
 	}
+	return true
 }
 
 // stepDown ends the term: this participant stops being the leader and the

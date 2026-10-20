@@ -476,12 +476,18 @@ silently succeeding. Every implementation runs it, including the in-memory
 reference, which is what keeps the guarantee from becoming dialect-specific.
 
 **Chaos scenarios** run a real fleet against real infrastructure and break it
-underneath them. Participants share one process so their leadership intervals
+underneath them. Most participants share one process so their leadership intervals
 can be compared directly; the safety oracle asserts that no two ever overlap and
-that fence tokens never go backwards.
+that fence tokens never go backwards. `TestRealProcessFailure` additionally runs
+independent elector processes, kills them with `SIGKILL`, or freezes them with
+`SIGSTOP` until a successor takes over. After `SIGCONT`, the old process must
+report no leadership or usable fence. Both databases and both poolers are tested.
 
 | Scenario | What breaks |
 |---|---|
+| `TestRealProcessFailure` | actual participant process death and freeze/resume across a handover |
+| `TestPoolerServerConnectionsAreExhausted` | all PgBouncer/ProxySQL server connections pinned by transactions, then released |
+| `TestCascadingNetworkFailures` | degraded leader, isolated follower, total loss of replies, staggered recovery |
 | `TestSteadyState` | nothing — the baseline |
 | `TestLeaderIsPartitioned` | the leader's path is severed, others keep theirs |
 | `TestLeaderIsBlackholed` | packets stop moving; connections stay up |
@@ -526,6 +532,9 @@ statements:
 | `TestMySQLLeaderCrashes` | the leader dies without releasing |
 | `TestMySQLGracefulHandoverIsFast` | a clean shutdown, measuring failover |
 | `TestMySQLParticipantsSeeDifferentDatabaseClocks` | each participant is days out, differently |
+
+The lease-boundary regressions, process-failure scenarios, and their assumptions
+are described in [the resilience testing audit](RESILIENCE_TESTING.md).
 
 Most run against both the direct and the pooled path. Longer scenarios live
 behind `make test-soak`: a randomised soak that also replaces participants

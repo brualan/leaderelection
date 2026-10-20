@@ -9,9 +9,9 @@ require (
 	github.com/brualan/leaderelection/mysql v0.1.0
 	github.com/brualan/leaderelection/postgres v0.1.0
 	github.com/go-sql-driver/mysql v1.9.3
+	github.com/jackc/pgx/v5 v5.7.6
 )
 
 require (
 	filippo.io/edwards25519 v1.1.0 // indirect
-	github.com/jackc/pgx/v5 v5.7.6 // indirect
 )

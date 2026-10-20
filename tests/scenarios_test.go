@@ -32,6 +32,9 @@ var nextPort = firstPort
 // toxiproxy is about to fail every scenario in it, and one message naming the
 // cause beats thirty that do not.
 func TestMain(m *testing.M) {
+	if os.Getenv(processHelperEnv) == "1" {
+		os.Exit(runElectionProcess())
+	}
 	if err := harness.ResetProxies(harness.ToxiproxyURL()); err != nil {
 		fmt.Fprintf(os.Stderr, "clearing stale proxies: %v\nrun `make up`\n", err)
 		os.Exit(1)

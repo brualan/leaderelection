@@ -120,3 +120,31 @@ func TestSimulatedBackwardsDatabaseClockCannotExtendATerm(t *testing.T) {
 	s.settle(10 * simLease)
 	s.verify()
 }
+
+// Exercise the timeout boundary with all paths degraded together. Beyond the
+// operation timeout there must be no leader; healing must restore progress
+// even after every participant has exhausted its local lease.
+func TestSimulatedLatencyAroundOperationTimeout(t *testing.T) {
+	for _, delay := range []time.Duration{simOpLimit - 2*simStep, simOpLimit, simOpLimit + 2*simStep} {
+		t.Run(delay.String(), func(t *testing.T) {
+			s := newSim(t, simOptions{nodes: 4})
+			s.run(3*simLease, nil)
+			if s.leader() == nil {
+				t.Fatal("no leader before degradation")
+			}
+			for _, node := range s.nodes {
+				s.breakPath(node, simSlow, delay, 8*simLease)
+			}
+			s.run(4*simLease, nil)
+			if delay > simOpLimit && s.leader() != nil {
+				t.Fatal("leader survived while all operations time out")
+			}
+			s.settle(20 * simLease)
+			s.run(3*simLease, nil)
+			if s.leader() == nil {
+				t.Fatal("no stable leader after network recovery")
+			}
+			s.verify()
+		})
+	}
+}

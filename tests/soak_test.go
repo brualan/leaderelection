@@ -169,10 +169,10 @@ func TestRollingRestart(t *testing.T) {
 
 // More participants than the pooler has server connections.
 //
-// Queries do not fail here, they queue -- and then time out inside the pooler
-// rather than at either end of it. A participant cannot tell a query that
-// waited too long for a server connection from one the server never answered,
-// and it must not treat the difference as permission to keep leading.
+// This checks ordinary contention and stable leadership: short queries can
+// share the available connections without timing out. The chaos scenario
+// TestPoolerServerConnectionsAreExhausted pins every server connection to
+// verify actual starvation, step-down, and recovery.
 func TestPoolerExhaustion(t *testing.T) {
 	// The compose file gives PgBouncer a default pool size of five, so eight
 	// participants cannot all be talking to the database at once.
