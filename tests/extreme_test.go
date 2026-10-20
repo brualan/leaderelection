@@ -65,6 +65,7 @@ func TestExtremeChaos30Minutes(t *testing.T) {
 		{"all_paths_partitioned", TestEveryoneIsPartitioned},
 		{"rolling_replacement", TestRollingRestart},
 		{"election_isolation", TestTwoElectionsShareOneTable},
+		{"metrics_collection_under_partition", TestMetricsCollectionDuringNetworkFailure},
 	}
 	rng := rand.New(rand.NewSource(seed))
 	started := time.Now()
@@ -84,8 +85,8 @@ func TestExtremeChaos30Minutes(t *testing.T) {
 			}
 		}
 	}
-	if time.Since(started) < 30*time.Minute {
-		t.Fatal("campaign ended before the required 30 minutes")
+	if time.Since(started) < duration {
+		t.Fatal("campaign ended before the requested minimum duration")
 	}
 	t.Logf("EXTREME PASS elapsed=%s completed=%d seed=%d", time.Since(started), completed, seed)
 }

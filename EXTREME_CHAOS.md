@@ -20,7 +20,7 @@ binaries concurrently: their TestMain deletes proxies used by this campaign.
 The combined build tags are intentional; a regular chaos or soak run does not
 include this expensive campaign.
 
-Each complete cycle contains all 22 scenario families in seeded random order.
+Each complete cycle contains all 23 scenario families in seeded random order.
 The first cycle always runs in full; later cycles stop after the current family
 finishes once the minimum duration is reached. Every family uses its own test
 cleanup, and any failed family aborts the campaign. In addition to the existing
@@ -41,6 +41,8 @@ network/database fault matrix the campaign adds:
   atomically activates a newer fence and rejects stale writes, while allowing
   current writes. This models receiver enforcement; it is not an integration
   test of Kafka/S3/HTTP enforcing tokens automatically.
+- Concurrent metrics collection while the leader loses its database replies,
+  checking snapshot invariants, timeout counters, self-fencing, and recovery.
 - Complete backend connection starvation in both poolers, real elector process
   SIGKILL and SIGSTOP/SIGCONT, table/row locks, read-only databases, partitions,
   flapping, rolling replacements, and independent elections sharing a table.
@@ -108,3 +110,64 @@ No production election code was changed for this campaign. The result supports
 the listed behavior under the documented clock/database assumptions. It does
 not make unbounded clock drift, forward database-clock jumps, lost committed
 fencing history, or an unfenced external receiver safe.
+
+## Result: 60-minute campaign, 2026-10-20
+
+The campaign passed with exit code 0 after **60 minutes 7.087 seconds**
+(3,607.087 seconds) of fault scenarios, excluding setup and compilation.
+Seed: `2026102060`; base commit: `a5dbdd6`. All recorded source hashes
+remained unchanged while the campaign ran.
+
+- 159 scenario-family executions across all 23 families: six full cycles and
+  21 families from the seventh cycle.
+- 482 safety-oracle checks; zero failed tests and race detector warnings.
+- All 24 synchronized herd measurements reached 48 concurrent acquires.
+- 144 clean-release handovers; maximum measured latency 457.170 ms.
+- The fenced receiver model rejected 106,611 stale writes from a writer that
+  deliberately ignored cancellation. These are rejected application attempts,
+  not simultaneous valid leases issued by the library.
+- Clock checks passed 20 race-enabled repetitions, with the same unsupported
+  clock boundaries described above.
+- The additional partial-stream test passed **all eight cases** separately,
+  in 42.87 seconds (43.898 seconds including race-detector shutdown). Every
+  case forwarded exactly two bytes, recorded renewal timeouts, stopped the old
+  callback, acquired a newer fence, and recovered after healing. No overlap
+  was observed. This supplement was not included in the 60-minute binary.
+
+Final `make check` and tagged `go vet` passed. Optional `golangci-lint` was
+unavailable. Test containers were stopped with data preserved.
+
+Evidence is saved locally under `test-results/extreme-60m-20261020T132847Z`:
+`.log`, `.meta.json`, `.summary.json`, `.partialstall.log`, `.check.log`, and
+`.docker.log`. These files are ignored by Git. Production library code was
+not changed. The clock and receiver assumptions above still apply.
+
+## Partial protocol exchange followed by a silent stall
+
+`TestPartialProtocolBytesThenSilentStall` adds a real TCP relay in front of
+each of the four database routes. It first establishes a healthy leader and
+accepts a renewal. It then forwards exactly two application-stream bytes in
+one direction and silently discards subsequent payload in that direction.
+There is no injector timeout, EOF, or RST; the opposite direction stays open.
+Request and reply stalls are separate cases, for eight cases total.
+
+The checks require the driver operation to finish through client cancellation
+or timeout, the local leader and its callback to stop, a healthy successor to
+obtain a newer fence, and the old participant to recover after healing without
+reviving its stale term. Socket teardown during test cleanup cannot satisfy
+these assertions. This models stalled protocol traffic, not a specific
+middlebox implementation.
+
+The test was written after the 60-minute campaign had started and is a separate
+supplement; it is not part of that campaign's running binary. Future ordinary
+`make test-chaos` runs include it. To run just this test against the local
+Compose fixtures without invoking the shared chaos proxy reset:
+
+```bash
+make up
+cd tests
+go test -tags=partialstall -race -count=1 -timeout=5m -v \
+  -run '^TestPartialProtocolBytesThenSilentStall$' .
+```
+
+Run it sequentially with the other database fault suites.
