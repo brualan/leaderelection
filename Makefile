@@ -44,6 +44,11 @@ test-chaos: up ## Chaos scenarios: partitions, hangs, restarts, pooler failures.
 test-soak: up ## Long scenarios: randomised churn, rolling restarts, pool exhaustion.
 	cd tests && go test -tags=soak -race -timeout 60m ./...
 
+.PHONY: test-extreme
+test-extreme: up ## At least 30 minutes of repeated compound failures (explicit opt-in).
+	go test -race -count=20 -timeout 3m -run 'Test(DatabaseForwardClockJumpRequiresReceiverFencing|UnboundedSlowClockRequiresReceiverFencing|SimulatedClockRateSkewIsAbsorbedByTheSafetyMargin|LateRenewalCannotReviveAnExpiredLocalTerm|RenewalDeadlineBoundary)$$' .
+	cd tests && LEADERELECTION_EXTREME=1 go test -tags=chaos,soak -race -count=1 -timeout 90m -v -run '^TestExtremeChaos30Minutes$$' .
+
 .PHONY: test-all
 test-all: test test-int test-chaos ## Every suite except the soak.
 

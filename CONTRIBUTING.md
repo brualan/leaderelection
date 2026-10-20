@@ -32,6 +32,7 @@ make test        # unit, simulation and fuzz corpora, race detector, no Docker
 make test-int    # against real PostgreSQL and MySQL, direct and pooled
 make test-chaos  # partitions, hangs, restarts, locks, pooler failures
 make test-soak   # long randomised runs, rolling restarts, pool exhaustion
+make test-extreme # at least 30m of compound faults; see EXTREME_CHAOS.md
 make test-all    # everything except the soak
 make cover       # merged profiles with a 100% floor
 ```

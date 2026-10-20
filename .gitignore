@@ -8,3 +8,6 @@
 # IDE.
 .idea/
 .vscode/
+
+# Long-running chaos campaign logs.
+/test-results/
