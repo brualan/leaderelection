@@ -29,6 +29,10 @@ jobs:
       - uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+      # The action's default working directory is the repository root. Run the
+      # same checks for every module, including test and repository tooling.
+      - name: Lint every module
+        run: make lint
 
   # The core module is what consumers import, so it is built and tested on the
   # oldest Go it claims to support as well as the newest. Workspace mode is off

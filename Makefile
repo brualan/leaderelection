@@ -7,6 +7,7 @@ SHELL := bash
 
 COVERDIR := .cover
 MODULES := . ./postgres ./mysql
+LINT_MODULES := . ./postgres ./mysql ./tests ./tools
 
 # Two paths to each database. The suites run against both, because "works
 # directly but not through the pooler" is this library's likeliest bug.
@@ -98,7 +99,7 @@ lint: ## Vet, formatting and golangci-lint if it is installed.
 	@unformatted=$$(gofmt -l . | grep -v '^\.cover/' || true); \
 	if [ -n "$$unformatted" ]; then echo "gofmt needed:"; echo "$$unformatted"; exit 1; fi
 	@if command -v golangci-lint >/dev/null; then \
-		for m in $(MODULES); do echo "==> golangci-lint $$m"; (cd $$m && golangci-lint run); done; \
+		for m in $(LINT_MODULES); do echo "==> golangci-lint $$m"; (cd $$m && golangci-lint run); done; \
 	else \
 		echo "golangci-lint not installed, skipping"; \
 	fi
