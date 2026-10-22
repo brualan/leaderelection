@@ -8,6 +8,10 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 
+- Offline `SchemaSQL(opts...)` and read-only `Store.CheckSchema(ctx)` for both SQL
+  stores. Deployment examples now use external migrations and DML-only service
+  credentials; `EnsureSchema` is deprecated and retained for compatibility.
+
 - Leader election over a shared PostgreSQL or MySQL instance, for replicas
   spread across clusters that cannot reach each other.
 - Safety through database-side timestamps, conservative local deadlines, and a

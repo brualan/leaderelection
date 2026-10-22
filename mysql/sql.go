@@ -117,8 +117,7 @@ const inspectSQL = `
 SELECT holder, fence, acquired_at, renewed_at, expires_at, payload, UTC_TIMESTAMP(6)
 FROM %[1]s WHERE name = ?`
 
-// schemaSQL creates the table. It is idempotent, so calling EnsureSchema on
-// every start is safe.
+// schemaSQL is the initial DDL for the external migration process.
 //
 // Three choices in here are not cosmetic.
 //
@@ -153,8 +152,8 @@ CREATE TABLE IF NOT EXISTS %[1]s (
     PRIMARY KEY (name)
 ) ENGINE=InnoDB`
 
-// Schema returns the DDL for a leader-election table, for callers who manage
-// their schema with a migration tool rather than with [Store.EnsureSchema].
+// Schema returns the initial DDL for an external migration tool.
+// See [SchemaSQL] to use the same options and defaults as [New].
 //
 // database may be empty to use the connection's default schema. Both
 // identifiers are validated, and Schema returns an error rather than emitting

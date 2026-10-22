@@ -127,7 +127,7 @@ func main() {
 	}
 	defer store.Close()
 
-	if err := store.EnsureSchema(ctx); err != nil {
+	if err := store.CheckSchema(ctx); err != nil {
 		panic(err)
 	}
 
@@ -214,13 +214,34 @@ CREATE TABLE IF NOT EXISTS leader_election (
 ) WITH (fillfactor = 70);
 ```
 
-`store.EnsureSchema(ctx)` creates it — idempotent, safe on every replica on
-every start. If your deployment withholds DDL rights from the application, get
-the statement for your migration tool instead:
+Provision the table **before deploying the service**, through your normal migration
+pipeline using a separate privileged database identity. Generate the initial DDL
+offline, with the same options as the runtime store:
 
 ```go
-ddl, _ := postgres.Schema("", postgres.DefaultTable)
+ddl, err := postgres.SchemaSQL(postgres.WithTable("coord", "leader_election"))
+if err != nil {
+    return err
+}
+// Save ddl as a reviewed migration; run it with your migration tool.
 ```
+
+Use `postgres.WithTable("coord", "leader_election")` when creating the store too.
+`SchemaSQL()` uses the default table; the existing `Schema(schema, table)` API
+remains available. These generate initial DDL, not upgrades to existing tables.
+Create the enclosing schema/database separately if needed.
+
+`New` and `Connect` never create or migrate tables. The service identity needs
+only `SELECT`, `INSERT`, and `UPDATE` on the lease table (plus PostgreSQL `USAGE`
+on its schema and connection access). No `CREATE`, `ALTER`, `DROP`, or `DELETE`
+privileges are needed. Release expires a row in place; deleting rows would reset
+fencing history.
+
+At startup, optionally call `store.CheckSchema(ctx)` with a bounded context.
+This performs a read-only query even on an empty table, surfacing a missing table,
+missing columns, or denied SELECT access. It does not validate types, constraints,
+indexes, or write privileges and never repairs the schema. `EnsureSchema` remains
+available for compatibility but is deprecated in favor of external migrations.
 
 One row per election; unrelated elections share the table. Use
 `postgres.WithTable(schema, table)` for a different name.
@@ -245,7 +266,7 @@ CREATE TABLE IF NOT EXISTS leader_election (
 ) ENGINE=InnoDB;
 ```
 
-`mysql.Schema` and `mysql.WithTable` are the counterparts of the calls above.
+`mysql.SchemaSQL`, `mysql.Schema`, `mysql.Store.CheckSchema`, and `mysql.WithTable` are the counterparts of the calls above.
 
 ## Configuration
 
@@ -624,7 +645,7 @@ Worth alerting on: `remaining` persistently negative (nobody is leading),
 `fence` climbing quickly (leadership is flapping — usually the timing invariant
 is too tight for your latency), and any error where `postgres.Fatal` is true.
 
-The table is small and hot. `fillfactor = 70` is set by `EnsureSchema`; if you
+The table is small and hot. `fillfactor = 70` is included in the generated DDL; if you
 run the DDL yourself, keep it.
 
 ## Compared with

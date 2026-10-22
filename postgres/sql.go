@@ -84,8 +84,7 @@ const inspectSQL = `
 SELECT holder, fence, acquired_at, renewed_at, expires_at, payload, now()
 FROM %[1]s WHERE name = $1`
 
-// schemaSQL creates the table. It is idempotent, so calling EnsureSchema on
-// every start is safe.
+// schemaSQL is the initial DDL for the external migration process.
 //
 // fillfactor leaves room on the page for updated row versions. The row is
 // rewritten every renewal -- several times a minute, forever -- and keeping
@@ -103,8 +102,8 @@ CREATE TABLE IF NOT EXISTS %[1]s (
     payload     bytea
 ) WITH (fillfactor = 70)`
 
-// Schema returns the DDL for a leader-election table, for callers who manage
-// their schema with a migration tool rather than with [Store.EnsureSchema].
+// Schema returns the initial DDL for an external migration tool.
+// See [SchemaSQL] to use the same options and defaults as [New].
 //
 // schema may be empty to use the connection's search path. Both identifiers
 // are validated, and Schema returns an error rather than emitting anything it

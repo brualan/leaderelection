@@ -72,7 +72,8 @@ func WithTable(schema, table string) Option {
 	}
 }
 
-// New returns a Store that uses db.
+// New returns a Store that uses db. It does not query or modify the schema.
+// Provision the table separately with [SchemaSQL] before running elections.
 //
 // The caller keeps ownership of the pool: [Store.Close] does not close it. Use
 // this when the application already has a pool, and [Connect] when it does
@@ -89,6 +90,7 @@ func New(db *pgxpool.Pool, opts ...Option) (*Store, error) {
 }
 
 // Connect builds a pool from dsn and returns a Store that owns it.
+// It does not create or migrate tables; provision them separately with [SchemaSQL].
 //
 // The pool is configured to work through PgBouncer in transaction pooling mode
 // as well as directly:
@@ -180,11 +182,11 @@ func (s *Store) Close() { s.close() }
 // Table returns the quoted, fully qualified table this Store operates on.
 func (s *Store) Table() string { return s.table }
 
-// EnsureSchema creates the leases table if it does not exist. It is idempotent
-// and safe to call from every replica on every start.
+// EnsureSchema creates the leases table if it does not exist. It requires DDL
+// privileges and does not validate or upgrade an existing table.
 //
-// It needs CREATE on the schema. Deployments that withhold DDL rights from the
-// application should run [Schema] through their migration tool instead.
+// Deprecated: provision tables through a separate migration process using
+// [SchemaSQL]. Use [Store.CheckSchema] for a read-only startup check.
 func (s *Store) EnsureSchema(ctx context.Context) error {
 	if _, err := s.db.Exec(ctx, s.schemaSQL); err != nil {
 		return fmt.Errorf("leaderelection/postgres: ensure schema: %w", wrap(err))
