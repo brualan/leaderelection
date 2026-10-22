@@ -32,7 +32,11 @@ func Example() {
 		panic(err)
 	}
 
-	go elector.Run(ctx)
+	go func() {
+		if err := elector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 	<-done
 
 	// Output:
@@ -53,7 +57,11 @@ func ExampleElector_Fence() {
 	if err != nil {
 		panic(err)
 	}
-	go elector.Run(ctx)
+	go func() {
+		if err := elector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	for {
 		if fence, ok := elector.Fence(); ok {
@@ -83,7 +91,11 @@ func ExampleElector_Status() {
 	if err != nil {
 		panic(err)
 	}
-	go leader.Run(ctx)
+	go func() {
+		if err := leader.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	// Wait for the term to start before the follower joins, so that the
 	// follower's first read already sees a leader rather than an empty
@@ -100,7 +112,11 @@ func ExampleElector_Status() {
 	if err != nil {
 		panic(err)
 	}
-	go follower.Run(ctx)
+	go func() {
+		if err := follower.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	for {
 		if status := follower.Status(); status.Leader == "eu-west" {

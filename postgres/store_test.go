@@ -90,13 +90,29 @@ func (r *fakeRows) Scan(dest ...any) error {
 	for i, d := range dest {
 		switch p := d.(type) {
 		case *string:
-			*p = values[i].(string)
+			value, ok := values[i].(string)
+			if !ok {
+				return errors.New("unexpected scan value type")
+			}
+			*p = value
 		case *int64:
-			*p = values[i].(int64)
+			value, ok := values[i].(int64)
+			if !ok {
+				return errors.New("unexpected scan value type")
+			}
+			*p = value
 		case *time.Time:
-			*p = values[i].(time.Time)
+			value, ok := values[i].(time.Time)
+			if !ok {
+				return errors.New("unexpected scan value type")
+			}
+			*p = value
 		case *[]byte:
-			*p = values[i].([]byte)
+			value, ok := values[i].([]byte)
+			if !ok {
+				return errors.New("unexpected scan value type")
+			}
+			*p = value
 		}
 	}
 	return nil

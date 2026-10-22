@@ -250,7 +250,9 @@ func (p *Toxiproxy) do(method, path string, body, out any) error {
 		reader = bytes.NewReader(nil)
 	}
 
-	req, err := http.NewRequest(method, p.base+path, reader)
+	ctx, cancel := context.WithTimeout(context.Background(), p.client.Timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, method, p.base+path, reader)
 	if err != nil {
 		return err
 	}
@@ -260,7 +262,7 @@ func (p *Toxiproxy) do(method, path string, body, out any) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode >= 300 {
 		var buf bytes.Buffer
@@ -395,7 +397,8 @@ func (d *Docker) output(args ...string) (string, error) {
 	defer cancel()
 
 	full := append([]string{"compose", "-f", d.composeFile}, args...)
-	cmd := exec.CommandContext(ctx, "docker", full...)
+	// Arguments are internal test-fixture commands, passed directly without a shell.
+	cmd := exec.CommandContext(ctx, "docker", full...) //nolint:gosec
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

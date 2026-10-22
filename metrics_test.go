@@ -217,14 +217,16 @@ func TestMetricsDeadlineCheckDoesNotTriggerStepDown(t *testing.T) {
 
 func TestMetricsCountersSurviveRunReuse(t *testing.T) {
 	h := newHarness(t, nil)
+	var expectedTerms uint64
 	for fence := int64(1); fence <= 2; fence++ {
+		expectedTerms++
 		token := fence
 		h.store.setAcquire(func(context.Context, int) (Lease, error) { return h.grant("me", token), nil })
 		ctx, cancel := context.WithCancel(context.Background())
 		t.Cleanup(cancel)
 		done := make(chan error, 1)
 		go func() { done <- h.e.Run(ctx) }()
-		h.awaitWithoutTime("promotion", func() bool { return h.e.Metrics().TermsStartedTotal == uint64(token) })
+		h.awaitWithoutTime("promotion", func() bool { return h.e.Metrics().TermsStartedTotal == expectedTerms })
 		cancel()
 		h.awaitWithoutTime("Run exit", func() bool {
 			select {

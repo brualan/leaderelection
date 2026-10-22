@@ -404,8 +404,8 @@ func TestShutdownWaitsForTheLeaderCallback(t *testing.T) {
 		return true
 	})
 	select {
-	case <-h.done:
-		t.Fatal("Run returned while the leader callback was still running")
+	case err := <-h.done:
+		t.Fatalf("Run returned while the leader callback was still running: %v", err)
 	default:
 	}
 

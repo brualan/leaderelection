@@ -73,7 +73,8 @@ func merge(paths []string) (map[string][]block, error) {
 	merged := map[string]map[string]block{}
 
 	for _, p := range paths {
-		f, err := os.Open(p)
+		// Coverage profile paths are explicitly supplied by the CLI caller.
+		f, err := os.Open(p) //nolint:gosec
 		if err != nil {
 			return nil, err
 		}
@@ -85,7 +86,7 @@ func merge(paths []string) (map[string][]block, error) {
 			}
 			file, b, err := parse(line)
 			if err != nil {
-				f.Close()
+				_ = f.Close() // Preserve the profile parsing error.
 				return nil, fmt.Errorf("%s: %w", p, err)
 			}
 			if merged[file] == nil {
@@ -98,7 +99,10 @@ func merge(paths []string) (map[string][]block, error) {
 			merged[file][b.span] = b
 		}
 		err = scanner.Err()
-		f.Close()
+		closeErr := f.Close()
+		if err == nil {
+			err = closeErr
+		}
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", p, err)
 		}

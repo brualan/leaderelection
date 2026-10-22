@@ -261,7 +261,11 @@ func TestAcquireArgumentsLineUpWithTheStatement(t *testing.T) {
 	// payload is the identity, and the two microsecond values must match.
 	for i, want := range []any{"e", "a", int64(15_000_000), []byte("p"), "a", "a", "a", "a", []byte("p"), "a", int64(15_000_000)} {
 		if got, ok := args[i].([]byte); ok {
-			if string(got) != string(want.([]byte)) {
+			expected, ok := want.([]byte)
+			if !ok {
+				t.Fatalf("argument %d: expected payload type, got %T", i+1, want)
+			}
+			if string(got) != string(expected) {
 				t.Fatalf("argument %d = %q, want %q", i+1, got, want)
 			}
 			continue

@@ -138,22 +138,38 @@ func (f *fakeStore) setRelease(h func(context.Context, int, int64) error) {
 
 func (f *fakeStore) Inspect(ctx context.Context, name string) (Lease, error) {
 	n, h := f.dispatch("inspect", storeArgs{name: name})
-	return h.(func(context.Context, int) (Lease, error))(ctx, n)
+	handler, ok := h.(func(context.Context, int) (Lease, error))
+	if !ok {
+		panic("unexpected fake store handler type")
+	}
+	return handler(ctx, n)
 }
 
 func (f *fakeStore) Acquire(ctx context.Context, name, identity string, ttl time.Duration, payload []byte) (Lease, error) {
 	n, h := f.dispatch("acquire", storeArgs{name: name, identity: identity, ttl: ttl, payload: payload})
-	return h.(func(context.Context, int) (Lease, error))(ctx, n)
+	handler, ok := h.(func(context.Context, int) (Lease, error))
+	if !ok {
+		panic("unexpected fake store handler type")
+	}
+	return handler(ctx, n)
 }
 
 func (f *fakeStore) Renew(ctx context.Context, name, identity string, fence int64, ttl time.Duration, payload []byte) (Lease, error) {
 	n, h := f.dispatch("renew", storeArgs{name: name, identity: identity, fence: fence, ttl: ttl, payload: payload})
-	return h.(func(context.Context, int, int64) (Lease, error))(ctx, n, fence)
+	handler, ok := h.(func(context.Context, int, int64) (Lease, error))
+	if !ok {
+		panic("unexpected fake store handler type")
+	}
+	return handler(ctx, n, fence)
 }
 
 func (f *fakeStore) Release(ctx context.Context, name, identity string, fence int64) error {
 	n, h := f.dispatch("release", storeArgs{name: name, identity: identity, fence: fence})
-	return h.(func(context.Context, int, int64) error)(ctx, n, fence)
+	handler, ok := h.(func(context.Context, int, int64) error)
+	if !ok {
+		panic("unexpected fake store handler type")
+	}
+	return handler(ctx, n, fence)
 }
 
 // harness wires an Elector to a fake clock and a fake store and runs it.

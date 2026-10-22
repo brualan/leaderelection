@@ -25,12 +25,14 @@ func SchemaSQL(opts ...Option) (string, error) {
 // it does not verify column types, constraints, indexes, or INSERT/UPDATE
 // privileges. Schema correctness remains the migration process's responsibility.
 func (s *Store) CheckSchema(ctx context.Context) error {
-	query := "SELECT name, holder, fence, acquired_at, renewed_at, expires_at, payload FROM " + s.table + " WHERE 1 = 0"
+	// s.table contains only identifiers validated and quoted by qualify at construction.
+	query := "SELECT name, holder, fence, acquired_at, renewed_at, expires_at, payload FROM " + s.table + " WHERE 1 = 0" //nolint:gosec
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("leaderelection/mysql: check schema: %w", wrap(err))
 	}
-	defer rows.Close()
+	// Iteration below checks rows.Err, including automatic close errors at EOF.
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 	}
 	if err := rows.Err(); err != nil {

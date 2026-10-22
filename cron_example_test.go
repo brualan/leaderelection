@@ -52,7 +52,11 @@ func Example_cronService() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go elector.Run(ctx)
+	go func() {
+		if err := elector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	// Wait for leadership to be established
 	for !elector.IsLeader() {

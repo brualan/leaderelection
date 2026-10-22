@@ -165,10 +165,11 @@ func TestFakeDriverIsWellFormed(t *testing.T) {
 	// The store must never reach either of these; the fake refuses them so that
 	// a change which starts preparing or transacting fails here rather than in
 	// production behind a pooler.
-	if _, err := db.Prepare("SELECT 1"); err == nil {
+	if stmt, err := db.PrepareContext(context.Background(), "SELECT 1"); err == nil {
+		defer func() { _ = stmt.Close() }()
 		t.Fatal("the fake accepted a prepared statement")
 	}
-	if _, err := db.Begin(); err == nil {
+	if _, err := db.BeginTx(context.Background(), nil); err == nil {
 		t.Fatal("the fake accepted a transaction")
 	}
 	if f.Driver() == nil {

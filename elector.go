@@ -366,7 +366,8 @@ func (e *Elector) lead(ctx context.Context, t *term) {
 		}
 
 		sentAt := e.clock.Now()
-		lease, err := e.renew(t.ctx, t.fence)
+		// The term context inherits ctx and is also canceled on leadership loss.
+		lease, err := e.renew(t.ctx, t.fence) //nolint:contextcheck
 		switch {
 		case err == nil:
 			if !lease.HeldBy(e.cfg.Identity) || lease.Fence != t.fence {

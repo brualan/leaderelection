@@ -2,6 +2,7 @@ package leaderelection
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 )
@@ -152,7 +153,7 @@ func TestRenewalLoopEndsATermWhenWatchdogHasNotRun(t *testing.T) {
 	if h.e.IsLeader() {
 		t.Fatal("expired term still leads")
 	}
-	if h.e.Status().LastError != ErrLeaseExpiredLocally {
+	if !errors.Is(h.e.Status().LastError, ErrLeaseExpiredLocally) {
 		t.Fatalf("unexpected reason: %v", h.e.Status().LastError)
 	}
 	if h.store.count("release") != 0 {

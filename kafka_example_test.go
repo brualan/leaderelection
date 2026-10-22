@@ -50,7 +50,11 @@ func Example_kafkaConsumer() {
 	defer cancel()
 
 	// Run the election in background
-	go elector.Run(ctx)
+	go func() {
+		if err := elector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	// Wait for this replica to become leader
 	for !elector.IsLeader() {
@@ -134,7 +138,6 @@ func Example_kafkaWithRebalancing() {
 	logger := slog.Default()
 
 	type KafkaState struct {
-		consumer interface{} // Real Kafka consumer
 		// Track which partitions this leader is responsible for
 		ownedPartitions map[int]bool
 	}
@@ -183,7 +186,11 @@ func Example_kafkaWithRebalancing() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go elector.Run(ctx)
+	go func() {
+		if err := elector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	for !elector.IsLeader() {
 		time.Sleep(100 * time.Millisecond)
@@ -245,9 +252,21 @@ func Example_multiServiceLeadership() {
 	defer cancel()
 
 	// All three services compete independently in their own elections
-	go kafkaElector.Run(ctx)
-	go batchElector.Run(ctx)
-	go cacheElector.Run(ctx)
+	go func() {
+		if err := kafkaElector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
+	go func() {
+		if err := batchElector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
+	go func() {
+		if err := cacheElector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	// Wait for elections to complete
 	for !kafkaElector.IsLeader() || !batchElector.IsLeader() || !cacheElector.IsLeader() {

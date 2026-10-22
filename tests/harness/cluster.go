@@ -190,9 +190,10 @@ func (c *Cluster) startNode(ctx context.Context, opts Options, i int) *Node {
 	c.t.Helper()
 
 	name := fmt.Sprintf("node-%d", i)
-	proxy := c.tp.CreateProxy(c.t,
+	// Fixture administration has its own timeout and must work independently of node cancellation.
+	proxy := c.tp.CreateProxy(c.t, //nolint:contextcheck
 		fmt.Sprintf("%s-%s", c.Election, name), opts.BasePort+i, opts.Upstream)
-	proxy.ClearToxics(c.t)
+	proxy.ClearToxics(c.t) //nolint:contextcheck // Fixture administration uses its own bounded context.
 
 	store, err := opts.Backend.Open(ctx, fmt.Sprintf(opts.DSNTemplate, proxy.Listen))
 	if err != nil {
@@ -269,7 +270,10 @@ func (c *Cluster) Kill(t *testing.T, node *Node) {
 	node.Proxy.Cut(t)
 	node.cancel()
 	select {
-	case <-node.done:
+	case err := <-node.done:
+		if err != nil {
+			t.Fatalf("%s stopped with error: %v", node.Name, err)
+		}
 	case <-time.After(30 * time.Second):
 		t.Fatalf("%s did not stop", node.Name)
 	}

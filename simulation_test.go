@@ -176,8 +176,10 @@ func (k simFaultKind) String() string {
 		return "refused"
 	case simLostReply:
 		return "reply-lost"
-	default:
+	case simClockStep:
 		return "clock-step"
+	default:
+		return "unknown"
 	}
 }
 
@@ -237,7 +239,7 @@ func (s *sim) start(i int, opts simOptions) *simNode {
 		clock:            n.clk,
 		// Jitter is drawn from a sequence of this participant's own, so that no
 		// two of them poll in lockstep and no run depends on the global source.
-		randFloat: simRand(uint64(i)*2654435761 + 1),
+		randFloat: simRand(uint64(i)*2654435761 + 1), //nolint:gosec // Node indices are nonnegative and bounded by the simulation size.
 		Callbacks: Callbacks{
 			OnStartedLeading: func(ctx context.Context, fence int64) {
 				s.began(n, fence)
@@ -655,6 +657,8 @@ func (c *simConn) roundTrip(ctx context.Context, apply func(time.Time) (Lease, e
 		}
 		return Lease{}, errSimReplyLost
 
+	case simHealthy, simClockStep:
+		// Both use the normal request path; clock steps update the store separately.
 	case simSlow:
 		if !c.node.wait(ctx, f.delay) {
 			return Lease{}, context.Cause(ctx)
