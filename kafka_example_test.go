@@ -210,7 +210,7 @@ func Example_multiServiceLeadership() {
 	logger := slog.Default()
 
 	// Service 1: Kafka consumer (must have leader for entire lifetime)
-	kafkaElector, _ := leaderelection.New(leaderelection.Config{
+	kafkaElector, err := leaderelection.New(leaderelection.Config{
 		Store:    store,
 		Name:     "kafka-consumer", // Different from other services
 		Identity: "replica-1",
@@ -221,9 +221,12 @@ func Example_multiServiceLeadership() {
 			},
 		},
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	// Service 2: Batch job (can be spawned by any leader when needed)
-	batchElector, _ := leaderelection.New(leaderelection.Config{
+	batchElector, err := leaderelection.New(leaderelection.Config{
 		Store:    store,
 		Name:     "batch-processor", // Different name = different election
 		Identity: "replica-1",
@@ -234,9 +237,12 @@ func Example_multiServiceLeadership() {
 			},
 		},
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	// Service 3: Cache warmer
-	cacheElector, _ := leaderelection.New(leaderelection.Config{
+	cacheElector, err := leaderelection.New(leaderelection.Config{
 		Store:    store,
 		Name:     "cache-warmer", // Another independent election
 		Identity: "replica-1",
@@ -247,6 +253,9 @@ func Example_multiServiceLeadership() {
 			},
 		},
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -285,15 +294,18 @@ func Example_followerRouting() {
 	observed := make(chan struct{}, 1)
 
 	// Leader
-	leader, _ := leaderelection.New(leaderelection.Config{
+	leader, err := leaderelection.New(leaderelection.Config{
 		Store:    store,
 		Name:     "kafka-consumer",
 		Identity: "replica-1",
 		Payload:  []byte("grpc://replica-1:9090"),
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	// Follower
-	follower, _ := leaderelection.New(leaderelection.Config{
+	follower, err := leaderelection.New(leaderelection.Config{
 		Store:    store,
 		Name:     "kafka-consumer",
 		Identity: "replica-2",
@@ -308,19 +320,32 @@ func Example_followerRouting() {
 			},
 		},
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	leaderDone := make(chan struct{})
 	followerDone := make(chan struct{})
 	defer func() { cancel(); <-leaderDone; <-followerDone }()
 
-	go func() { defer close(leaderDone); _ = leader.Run(ctx) }()
+	go func() {
+		defer close(leaderDone)
+		if err := leader.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	for !leader.IsLeader() {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	go func() { defer close(followerDone); _ = follower.Run(ctx) }()
+	go func() {
+		defer close(followerDone)
+		if err := follower.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 	<-observed
 
 	// Follower can query leader's address

@@ -134,16 +134,18 @@ func Connect(ctx context.Context, dsn string, opts ...Option) (*Store, error) {
 	db := sql.OpenDB(connector)
 	applyPoolBounds(db)
 
-	store, err := newStore(db, func() { _ = db.Close() }, opts...)
+	store, err := newStore(db, func() {
+		_ = db.Close() //nolint:errcheck // Store.Close has no error result; shutdown is best effort.
+	}, opts...)
 	if err != nil {
-		_ = db.Close()
+		_ = db.Close() //nolint:errcheck // Preserve the construction or connection error.
 		return nil, err
 	}
 	// sql.OpenDB is lazy, so without this a DSN naming a host that does not
 	// exist would only fail on the first election, minutes later and nowhere
 	// near the configuration that caused it.
 	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
+		_ = db.Close() //nolint:errcheck // Preserve the construction or connection error.
 		return nil, fmt.Errorf("leaderelection/mysql: connect: %w", wrap(err))
 	}
 	return store, nil

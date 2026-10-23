@@ -18,7 +18,10 @@ func TestSchemaSQL(t *testing.T) {
 			t.Fatalf("got %q, %v; want %q", got, err, want)
 		}
 	}
-	want, _ := Schema("", DefaultTable)
+	want, err := Schema("", DefaultTable)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got, err := SchemaSQL(); err != nil || got != want {
 		t.Fatalf("default: %q, %v", got, err)
 	}

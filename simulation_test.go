@@ -651,7 +651,7 @@ func (c *simConn) roundTrip(ctx context.Context, apply func(time.Time) (Lease, e
 	case simLostReply:
 		// The statement runs. The answer does not come back. Whatever the
 		// database now holds, this participant will not learn it here.
-		_, _ = c.store.execute(apply)
+		_, _ = c.store.execute(apply) //nolint:errcheck // A lost reply hides both success and failure from the participant.
 		if !c.node.wait(ctx, f.delay) {
 			return Lease{}, context.Cause(ctx)
 		}

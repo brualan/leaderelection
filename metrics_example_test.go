@@ -21,7 +21,12 @@ func ExampleElector_Metrics() {
 		panic(err)
 	}
 	done := make(chan struct{})
-	go func() { defer close(done); _ = elector.Run(ctx) }()
+	go func() {
+		defer close(done)
+		if err := elector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 	defer func() { cancel(); <-done }()
 	<-started
 

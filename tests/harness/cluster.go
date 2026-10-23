@@ -191,7 +191,7 @@ func (c *Cluster) startNode(ctx context.Context, opts Options, i int) *Node {
 
 	name := fmt.Sprintf("node-%d", i)
 	// Fixture administration has its own timeout and must work independently of node cancellation.
-	proxy := c.tp.CreateProxy(c.t, //nolint:contextcheck
+	proxy := c.tp.CreateProxy(c.t, //nolint:contextcheck // Fixture administration has its own timeout independent of node cancellation.
 		fmt.Sprintf("%s-%s", c.Election, name), opts.BasePort+i, opts.Upstream)
 	proxy.ClearToxics(c.t) //nolint:contextcheck // Fixture administration uses its own bounded context.
 

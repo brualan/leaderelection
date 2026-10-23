@@ -132,9 +132,10 @@ func (p *Postgres) SetReadOnly(t *testing.T, readOnly bool) {
 		// read-only would fail everything that runs after it, for a reason
 		// nowhere near the real one.
 		t.Cleanup(func() {
+			//nolint:errcheck // Best-effort recovery if the faulted database is unavailable.
 			_ = p.docker.TryExec("postgres", "sh", "-c",
 				psql("ALTER SYSTEM SET default_transaction_read_only = off"))
-			_ = p.docker.TryExec("postgres", "sh", "-c", psql("SELECT pg_reload_conf()"))
+			_ = p.docker.TryExec("postgres", "sh", "-c", psql("SELECT pg_reload_conf()")) //nolint:errcheck // Best-effort recovery if the faulted database is unavailable.
 		})
 	}
 }

@@ -25,6 +25,14 @@ The core module's empty dependency list is a feature, not an accident. A change
 that adds a dependency to it — including a test dependency — needs a very good
 reason. `internal/assert` exists so that the tests need no assertion library.
 
+`depguard` enforces this import policy for the core module, including tests;
+the database, scenario and tooling modules are exempt from that rule.
+`errcheck` also checks errors assigned to `_`. Handle errors explicitly, or
+use a local `//nolint:errcheck // reason` when ignoring one is intentional.
+`nolintlint` requires every suppression to name its linter and explain why,
+and rejects unused suppressions. Test helpers must call `t.Helper()` (or
+`tb.Helper()` for `testing.TB`) so failures point to their callers.
+
 ## Running the tests
 
 ```bash

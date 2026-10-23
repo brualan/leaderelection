@@ -26,13 +26,15 @@ func SchemaSQL(opts ...Option) (string, error) {
 // privileges. Schema correctness remains the migration process's responsibility.
 func (s *Store) CheckSchema(ctx context.Context) error {
 	// s.table contains only identifiers validated and quoted by qualify at construction.
-	query := "SELECT name, holder, fence, acquired_at, renewed_at, expires_at, payload FROM " + s.table + " WHERE 1 = 0" //nolint:gosec
+	query := "SELECT name, holder, fence, acquired_at, renewed_at, expires_at, payload FROM " + s.table + " WHERE 1 = 0" //nolint:gosec // The table identifier is validated and quoted at construction.
 	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
 		return fmt.Errorf("leaderelection/mysql: check schema: %w", wrap(err))
 	}
 	// Iteration below checks rows.Err, including automatic close errors at EOF.
-	defer func() { _ = rows.Close() }()
+	defer func() {
+		_ = rows.Close() //nolint:errcheck // rows.Err below reports automatic close errors at EOF.
+	}()
 	for rows.Next() {
 	}
 	if err := rows.Err(); err != nil {

@@ -50,7 +50,11 @@ func TestWithNowDrivesExpiry(t *testing.T) {
 	}
 
 	clk.advance(30 * time.Second)
-	if lease, _ := store.Acquire(ctx, "election", "b", time.Minute, nil); lease.HeldBy("b") {
+	lease, err := store.Acquire(ctx, "election", "b", time.Minute, nil)
+	if err != nil {
+		t.Fatalf("Acquire held lease: %v", err)
+	}
+	if lease.HeldBy("b") {
 		t.Fatal("b took a lease that is still live")
 	}
 

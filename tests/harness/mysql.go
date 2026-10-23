@@ -34,7 +34,9 @@ func init() {
 	// Silenced here rather than in the store: the logger belongs to the
 	// application, and a library that reassigns it takes away a decision that
 	// was never its to make.
-	_ = driver.SetLogger(log.New(io.Discard, "", 0))
+	if err := driver.SetLogger(log.New(io.Discard, "", 0)); err != nil {
+		panic(err)
+	}
 }
 
 // MySQL runs administrative statements against the test database.
@@ -141,7 +143,7 @@ func (m *MySQL) TerminateBackends(t *testing.T) int {
 	if killed > 0 {
 		// A session that ended on its own between the two statements makes KILL
 		// fail, and that is not the scenario failing.
-		_ = m.docker.TryExec("mysql", "sh", "-c", mysqlClient(kills.String()))
+		_ = m.docker.TryExec("mysql", "sh", "-c", mysqlClient(kills.String())) //nolint:errcheck // A session may have ended between listing and killing it.
 	}
 	return killed
 }
@@ -166,7 +168,7 @@ func (m *MySQL) SetReadOnly(t *testing.T, readOnly bool) {
 		// read-only would fail everything that runs after it, for a reason
 		// nowhere near the real one.
 		t.Cleanup(func() {
-			_ = m.docker.TryExec("mysql", "sh", "-c", mysqlClient("SET GLOBAL read_only = OFF"))
+			_ = m.docker.TryExec("mysql", "sh", "-c", mysqlClient("SET GLOBAL read_only = OFF")) //nolint:errcheck // Best-effort recovery if the faulted database is unavailable.
 		})
 	}
 }

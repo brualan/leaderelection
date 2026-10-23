@@ -1,37 +1,66 @@
 version: "2"
 
+run:
+  relative-path-mode: cfg
+
 linters:
   enable:
     - asasalint
     - bidichk
     - bodyclose
     - contextcheck
+    - depguard
     - durationcheck
     - errcheck
     - errchkjson
     - errorlint
     - exhaustive
     - fatcontext
+    - gocheckcompilerdirectives
     - gosec
     - govet
     - ineffassign
     - makezero
     - musttag
     - nilerr
+    - nilnesserr
     - noctx
+    - nolintlint
     - nosprintfhostport
     - rowserrcheck
     - sqlclosecheck
     - staticcheck
+    - thelper
     - unqueryvet
     - unused
 
+  exclusions:
+    rules:
+      - path: ^(postgres|mysql|tests|tools)/
+        linters:
+          - depguard
+
   settings:
+    depguard:
+      rules:
+        core:
+          # Submodules are excluded above; core tests follow the same policy.
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/brualan/leaderelection$
+            - github.com/brualan/leaderelection/internal/
+            - github.com/brualan/leaderelection/memstore$
+            - github.com/brualan/leaderelection/storetest$
     errcheck:
       # An election that cannot reach the database is the expected case, so
       # ignoring an error is occasionally correct here -- but only where the
       # code says why.
       check-type-assertions: true
+      check-blank: true
+    nolintlint:
+      require-specific: true
+      require-explanation: true
 
 issues:
   max-issues-per-linter: 0

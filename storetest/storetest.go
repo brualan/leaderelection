@@ -110,6 +110,7 @@ var cases = []testCase{
 }
 
 func testInspectUnknown(t *testing.T, s Suite) {
+	t.Helper()
 	_, err := s.Store.Inspect(ctx(t), name(t))
 	if !errors.Is(err, leaderelection.ErrNoLease) {
 		t.Fatalf("Inspect on unknown election: got %v, want ErrNoLease", err)
@@ -117,6 +118,7 @@ func testInspectUnknown(t *testing.T, s Suite) {
 }
 
 func testAcquireCreates(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	lease := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -140,6 +142,7 @@ func testAcquireCreates(t *testing.T, s Suite) {
 }
 
 func testAcquireIsIdempotentForHolder(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	first := mustAcquire(t, s, n, "a", longTTL, nil)
 	second := mustAcquire(t, s, n, "a", longTTL, nil)
@@ -154,6 +157,7 @@ func testAcquireIsIdempotentForHolder(t *testing.T, s Suite) {
 }
 
 func testAcquireDeniedWhileHeld(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -173,6 +177,7 @@ func testAcquireDeniedWhileHeld(t *testing.T, s Suite) {
 }
 
 func testAcquireAfterExpiryByOther(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	first := mustAcquire(t, s, n, "a", s.ExpiryTTL, nil)
 	waitForExpiry(t, s, n)
@@ -188,6 +193,7 @@ func testAcquireAfterExpiryByOther(t *testing.T, s Suite) {
 }
 
 func testAcquireAfterExpiryBySameHolder(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	first := mustAcquire(t, s, n, "a", s.ExpiryTTL, nil)
 	waitForExpiry(t, s, n)
@@ -207,6 +213,7 @@ func testAcquireAfterExpiryBySameHolder(t *testing.T, s Suite) {
 }
 
 func testRenewExtends(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -229,6 +236,7 @@ func testRenewExtends(t *testing.T, s Suite) {
 }
 
 func testRenewRejectsWrongIdentity(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -240,6 +248,7 @@ func testRenewRejectsWrongIdentity(t *testing.T, s Suite) {
 }
 
 func testRenewRejectsWrongFence(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -253,6 +262,7 @@ func testRenewRejectsWrongFence(t *testing.T, s Suite) {
 }
 
 func testRenewRejectsExpired(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", s.ExpiryTTL, nil)
 	waitForExpiry(t, s, n)
@@ -266,6 +276,7 @@ func testRenewRejectsExpired(t *testing.T, s Suite) {
 }
 
 func testRenewRejectsUnknown(t *testing.T, s Suite) {
+	t.Helper()
 	_, err := s.Store.Renew(ctx(t), name(t), "a", 1, longTTL, nil)
 	if !errors.Is(err, leaderelection.ErrLeaseLost) {
 		t.Fatalf("Renew of an unknown election: got %v, want ErrLeaseLost", err)
@@ -273,6 +284,7 @@ func testRenewRejectsUnknown(t *testing.T, s Suite) {
 }
 
 func testReleaseFreesImmediately(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -290,6 +302,7 @@ func testReleaseFreesImmediately(t *testing.T, s Suite) {
 }
 
 func testReleaseIgnoresWrongGuard(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -306,6 +319,7 @@ func testReleaseIgnoresWrongGuard(t *testing.T, s Suite) {
 }
 
 func testReleaseIsIdempotent(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	if err := s.Store.Release(ctx(t), n, "a", 1); err != nil {
 		t.Fatalf("Release of an unknown election: %v", err)
@@ -320,6 +334,7 @@ func testReleaseIsIdempotent(t *testing.T, s Suite) {
 }
 
 func testReleaseOfAnExpiredLeaseIsANoOp(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", s.ExpiryTTL, nil)
 	waitForExpiry(t, s, n)
@@ -343,6 +358,7 @@ func testReleaseOfAnExpiredLeaseIsANoOp(t *testing.T, s Suite) {
 }
 
 func testPayloadRoundTrips(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	want := []byte("https://leader.cluster-a.example:8443")
 	held := mustAcquire(t, s, n, "a", longTTL, want)
@@ -371,6 +387,7 @@ func testPayloadRoundTrips(t *testing.T, s Suite) {
 }
 
 func testPayloadVisibleToFollowers(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	want := []byte("leader-endpoint")
 	mustAcquire(t, s, n, "a", longTTL, want)
@@ -389,6 +406,7 @@ func testPayloadVisibleToFollowers(t *testing.T, s Suite) {
 }
 
 func testTimestampsAreDatabaseSide(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	lease := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -411,6 +429,7 @@ func testTimestampsAreDatabaseSide(t *testing.T, s Suite) {
 }
 
 func testAcquiredAtStableAcrossRenewals(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -428,6 +447,7 @@ func testAcquiredAtStableAcrossRenewals(t *testing.T, s Suite) {
 }
 
 func testElectionsAreIndependent(t *testing.T, s Suite) {
+	t.Helper()
 	first, second := name(t), name(t)
 
 	a := mustAcquire(t, s, first, "a", longTTL, nil)
@@ -445,6 +465,7 @@ func testElectionsAreIndependent(t *testing.T, s Suite) {
 }
 
 func testIdentityIsOpaque(t *testing.T, s Suite) {
+	t.Helper()
 	// Identities are generated from hostnames, which can contain anything a
 	// DNS label or a container runtime allows. A store must treat them as
 	// data -- never as SQL, and never as a pattern.
@@ -469,6 +490,7 @@ func testIdentityIsOpaque(t *testing.T, s Suite) {
 }
 
 func testContextCancellationIsReported(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	held := mustAcquire(t, s, n, "a", longTTL, nil)
 
@@ -494,6 +516,7 @@ func testContextCancellationIsReported(t *testing.T, s Suite) {
 }
 
 func testConcurrentAcquireElectsOne(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	winners, fences := race(t, s, n, s.Concurrency, longTTL)
 
@@ -506,6 +529,7 @@ func testConcurrentAcquireElectsOne(t *testing.T, s Suite) {
 }
 
 func testConcurrentTakeoverElectsOne(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	first := mustAcquire(t, s, n, "incumbent", s.ExpiryTTL, nil)
 	waitForExpiry(t, s, n)
@@ -525,6 +549,7 @@ func testConcurrentTakeoverElectsOne(t *testing.T, s Suite) {
 }
 
 func testFenceIncreasesAcrossTerms(t *testing.T, s Suite) {
+	t.Helper()
 	n := name(t)
 	var previous int64
 	for i := range 5 {
@@ -671,6 +696,7 @@ func ctx(t *testing.T) context.Context {
 // name returns an election name unique to this call, so subtests and repeated
 // runs against a persistent database never collide.
 func name(t *testing.T) string {
+	t.Helper()
 	// Include the test's name so that a row left behind in a real database
 	// points back at what created it.
 	label := strings.Map(func(r rune) rune {

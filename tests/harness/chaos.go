@@ -85,7 +85,7 @@ func (p *Toxiproxy) CreateProxy(t *testing.T, name string, port int, upstream st
 	t.Helper()
 
 	// Remove a leftover from an interrupted run before recreating it.
-	_ = p.do(http.MethodDelete, "/proxies/"+name, nil, nil)
+	_ = p.do(http.MethodDelete, "/proxies/"+name, nil, nil) //nolint:errcheck // A leftover proxy may not exist; creation below checks success.
 
 	body := map[string]any{
 		"name":     name,
@@ -96,7 +96,9 @@ func (p *Toxiproxy) CreateProxy(t *testing.T, name string, port int, upstream st
 	if err := p.do(http.MethodPost, "/proxies", body, nil); err != nil {
 		t.Fatalf("create proxy %s: %v", name, err)
 	}
-	t.Cleanup(func() { _ = p.do(http.MethodDelete, "/proxies/"+name, nil, nil) })
+	t.Cleanup(func() {
+		_ = p.do(http.MethodDelete, "/proxies/"+name, nil, nil) //nolint:errcheck // Best-effort cleanup when the proxy or server may already be gone.
+	})
 
 	return &Proxy{
 		tp:       p,
@@ -232,7 +234,7 @@ func (p *Proxy) addToxic(t *testing.T, name, kind, stream string, toxicity float
 		"attributes": attrs,
 	}
 	// Replace rather than stack, so a scenario can re-apply a fault.
-	_ = p.tp.do(http.MethodDelete, "/proxies/"+p.Name+"/toxics/"+name, nil, nil)
+	_ = p.tp.do(http.MethodDelete, "/proxies/"+p.Name+"/toxics/"+name, nil, nil) //nolint:errcheck // The toxic may not exist; adding its replacement below checks success.
 	if err := p.tp.do(http.MethodPost, "/proxies/"+p.Name+"/toxics", body, nil); err != nil {
 		t.Fatalf("add toxic %s to %s: %v", name, p.Name, err)
 	}
@@ -262,11 +264,13 @@ func (p *Toxiproxy) do(method, path string, body, out any) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() {
+		_ = resp.Body.Close() //nolint:errcheck // Closing a response cannot change the HTTP operation result.
+	}()
 
 	if resp.StatusCode >= 300 {
 		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(resp.Body)
+		_, _ = buf.ReadFrom(resp.Body) //nolint:errcheck // A partial diagnostic body still accompanies the failing HTTP status.
 		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, strings.TrimSpace(buf.String()))
 	}
 	if out != nil {
@@ -295,7 +299,9 @@ func NewDocker(composeFile string) *Docker { return &Docker{composeFile: compose
 func (d *Docker) Pause(t *testing.T, service string) {
 	t.Helper()
 	d.compose(t, "pause", service)
-	t.Cleanup(func() { _ = d.try("unpause", service) })
+	t.Cleanup(func() {
+		_ = d.try("unpause", service) //nolint:errcheck // Recovery is best effort if the faulted container is unavailable.
+	})
 }
 
 // Unpause resumes a paused container.
@@ -308,7 +314,9 @@ func (d *Docker) Unpause(t *testing.T, service string) {
 func (d *Docker) Stop(t *testing.T, service string) {
 	t.Helper()
 	d.compose(t, "stop", service)
-	t.Cleanup(func() { _ = d.try("start", service) })
+	t.Cleanup(func() {
+		_ = d.try("start", service) //nolint:errcheck // Recovery is best effort if the faulted container is unavailable.
+	})
 }
 
 // Start brings a container back and waits for it to be healthy.
@@ -327,7 +335,9 @@ func (d *Docker) Start(t *testing.T, service string) {
 func (d *Docker) Kill(t *testing.T, service string) {
 	t.Helper()
 	d.compose(t, "kill", "-s", "KILL", service)
-	t.Cleanup(func() { _ = d.try("start", service) })
+	t.Cleanup(func() {
+		_ = d.try("start", service) //nolint:errcheck // Recovery is best effort if the faulted container is unavailable.
+	})
 }
 
 // Restart bounces a container, which is how a pooler loses every server
@@ -398,7 +408,7 @@ func (d *Docker) output(args ...string) (string, error) {
 
 	full := append([]string{"compose", "-f", d.composeFile}, args...)
 	// Arguments are internal test-fixture commands, passed directly without a shell.
-	cmd := exec.CommandContext(ctx, "docker", full...) //nolint:gosec
+	cmd := exec.CommandContext(ctx, "docker", full...) //nolint:gosec // The harness supplies Docker arguments to inject test faults.
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }

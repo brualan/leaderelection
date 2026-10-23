@@ -244,14 +244,24 @@ func Example_followerMonitoring() {
 	followerDone := make(chan struct{})
 	defer func() { cancel(); <-leaderDone; <-followerDone }()
 
-	go func() { defer close(leaderDone); _ = leader.Run(ctx) }()
+	go func() {
+		defer close(leaderDone)
+		if err := leader.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 
 	// Wait for election
 	for !leader.IsLeader() {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	go func() { defer close(followerDone); _ = follower.Run(ctx) }()
+	go func() {
+		defer close(followerDone)
+		if err := follower.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 	for follower.Status().Leader != "replica-leader" {
 		time.Sleep(time.Millisecond)
 	}
@@ -292,7 +302,12 @@ func Example_fencing() {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	defer func() { cancel(); <-done }()
-	go func() { defer close(done); _ = elector.Run(ctx) }()
+	go func() {
+		defer close(done)
+		if err := elector.Run(ctx); err != nil {
+			panic(err)
+		}
+	}()
 	<-started
 
 	// Wait for leadership

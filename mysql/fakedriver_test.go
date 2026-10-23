@@ -58,7 +58,11 @@ func openFake(t *testing.T, f *fakeDB) *sql.DB {
 	t.Helper()
 	db := sql.OpenDB(f)
 	db.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = db.Close() })
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Errorf("close fake database: %v", err)
+		}
+	})
 	return db
 }
 
@@ -166,7 +170,9 @@ func TestFakeDriverIsWellFormed(t *testing.T) {
 	// a change which starts preparing or transacting fails here rather than in
 	// production behind a pooler.
 	if stmt, err := db.PrepareContext(context.Background(), "SELECT 1"); err == nil {
-		defer func() { _ = stmt.Close() }()
+		defer func() {
+			_ = stmt.Close() //nolint:errcheck // The test already fails because preparing a statement unexpectedly succeeded.
+		}()
 		t.Fatal("the fake accepted a prepared statement")
 	}
 	if _, err := db.BeginTx(context.Background(), nil); err == nil {

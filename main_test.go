@@ -45,7 +45,9 @@ func awaitGoroutines(want int) error {
 		}
 		if time.Now().After(deadline) {
 			var buf stackBuffer
-			_ = pprof.Lookup("goroutine").WriteTo(&buf, 1)
+			if err := pprof.Lookup("goroutine").WriteTo(&buf, 1); err != nil {
+				return fmt.Errorf("goroutines outlived the tests; writing profile: %w", err)
+			}
 			return fmt.Errorf("%d goroutines outlived the tests (%d before, %d after):\n%s",
 				got-want, want, got, buf.String())
 		}

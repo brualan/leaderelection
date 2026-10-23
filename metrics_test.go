@@ -73,10 +73,21 @@ func TestMetricsTrackEachStoreOperationAndAccumulatedDuration(t *testing.T) {
 	})
 	h.store.setRelease(func(context.Context, int, int64) error { h.clk.Advance(400 * time.Millisecond); return nil })
 	for range 2 {
-		_, _ = h.e.inspect(context.Background())
-		_, _ = h.e.acquire(context.Background())
-		_, _ = h.e.renew(context.Background(), 1)
-		_ = h.e.release(context.Background(), 1)
+		_, err := h.e.inspect(context.Background())
+		if err != nil {
+			t.Fatalf("inspect: %v", err)
+		}
+		_, err = h.e.acquire(context.Background())
+		if err != nil {
+			t.Fatalf("acquire: %v", err)
+		}
+		_, err = h.e.renew(context.Background(), 1)
+		if err != nil {
+			t.Fatalf("renew: %v", err)
+		}
+		if err := h.e.release(context.Background(), 1); err != nil {
+			t.Fatalf("release: %v", err)
+		}
 	}
 	m := h.e.Metrics()
 	for _, tc := range []struct {
@@ -315,7 +326,12 @@ func TestMetricsErrorClassificationCannotBlockWatchdogMutex(t *testing.T) {
 	t.Cleanup(unblock)
 	h.store.setInspect(func(context.Context, int) (Lease, error) { return Lease{}, blocking })
 	done := make(chan struct{})
-	go func() { defer close(done); _, _ = h.e.inspect(context.Background()) }()
+	go func() {
+		defer close(done)
+		if _, err := h.e.inspect(context.Background()); !errors.Is(err, blocking) {
+			t.Errorf("inspect: got %v, want injected error", err)
+		}
+	}()
 	<-blocking.entered
 	collected := make(chan Metrics, 1)
 	go func() { collected <- h.e.Metrics() }()

@@ -81,8 +81,8 @@ func TestGenerateIdentity(t *testing.T) {
 	if first == second {
 		t.Fatalf("two identities came out identical: %q", first)
 	}
-	host, _ := os.Hostname()
-	if host != "" && !strings.HasPrefix(first, host+"-") {
+	host, err := os.Hostname()
+	if err == nil && host != "" && !strings.HasPrefix(first, host+"-") {
 		t.Fatalf("identity %q does not start with the hostname %q", first, host)
 	}
 	if len(strings.Split(first, "-")) < 3 {
