@@ -1,5 +1,5 @@
-github.com/brualan/leaderelection v0.5.0 h1:lmAG3MPTBi8/KZg2pzipr7md1bAQjCqQbHjAHYmqXAM=
-github.com/brualan/leaderelection v0.5.0/go.mod h1:C778B2byi4SGS0QR3CfvJaGryEE5xjtY1/gxgQ2i684=
+github.com/brualan/leaderelection v0.6.0 h1:jcLNOKfhBKU4MoPCggPxbxLLnUwLcqu9z1xr1r25IAs=
+github.com/brualan/leaderelection v0.6.0/go.mod h1:C778B2byi4SGS0QR3CfvJaGryEE5xjtY1/gxgQ2i684=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
