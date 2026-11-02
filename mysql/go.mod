@@ -3,7 +3,7 @@ module github.com/brualan/leaderelection/mysql
 go 1.23.0
 
 require (
-	github.com/brualan/leaderelection v0.1.0
+	github.com/brualan/leaderelection v0.5.0
 	github.com/go-sql-driver/mysql v1.9.3
 )
 

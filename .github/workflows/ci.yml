@@ -35,10 +35,15 @@ jobs:
         run: make lint
 
   # The core module is what consumers import, so it is built and tested on the
-  # oldest Go it claims to support as well as the newest. Workspace mode is off
-  # here on purpose: this is the module as a consumer sees it.
+  # oldest Go it claims to support as well as the newest. Workspace mode is
+  # off here on purpose: the checkout contains go.work, and without
+  # GOWORK=off these steps would test the workspace, not the modules as a
+  # consumer gets them. This is what catches unresolvable requires and
+  # go.mod/go.sum drift in the published modules.
   unit:
     runs-on: ubuntu-latest
+    env:
+      GOWORK: off
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +56,46 @@ jobs:
       - run: go test -race -timeout 5m ./...
       - run: cd postgres && go test -race -timeout 5m ./...
       - run: cd mysql && go test -race -timeout 5m ./...
+
+  # A module that cannot be built outside this checkout cannot be imported.
+  # The unit job runs the suites workspace-free; this job additionally checks
+  # that each published module still works as the dependency of a fresh,
+  # throwaway consumer that has no go.work of its own.
+  consumer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+      - name: Build each module as a consumer sees it
+        run: |
+          for m in . ./postgres ./mysql; do
+            (cd "$m" && GOWORK=off go build ./... && GOWORK=off go vet ./...)
+          done
+      - name: Compile against the modules from a clean project
+        run: |
+          tmp=$(mktemp -d)
+          cd "$tmp"
+          go mod init consumer-check
+          for m in postgres mysql; do
+            GOWORK=off go mod edit -require=github.com/brualan/leaderelection/$m@v0.0.0
+            GOWORK=off go mod edit -replace=github.com/brualan/leaderelection=$GITHUB_WORKSPACE
+            GOWORK=off go mod edit -replace=github.com/brualan/leaderelection/$m=$GITHUB_WORKSPACE/$m
+          done
+          cat > main.go <<'EOF'
+          package main
+
+          import (
+              _ "github.com/brualan/leaderelection"
+              _ "github.com/brualan/leaderelection/mysql"
+              _ "github.com/brualan/leaderelection/postgres"
+          )
+
+          func main() {}
+          EOF
+          GOWORK=off go mod tidy
+          GOWORK=off go build -buildvcs=false ./...
 
   # Every supported PostgreSQL, reached both directly and through PgBouncer.
   # The pooled path is not optional: it is where this library is most likely to
@@ -74,23 +119,23 @@ jobs:
         run: docker compose logs --tail 200
       - run: docker compose down -v
 
-  # And every supported MySQL, direct and through ProxySQL. The upsert this
-  # store is built on depends on the server evaluating assignments left to
-  # right, so "it worked on the version we developed against" is not a claim
-  # worth making without a matrix.
+  # And every supported MySQL and MariaDB, direct and through ProxySQL. The
+  # upsert this store is built on depends on the server evaluating assignments
+  # left to right, so "it worked on the version we developed against" is not a
+  # claim worth making without a matrix.
   integration-mysql:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        mysql: ["8.0", "8.4"]
+        db: ["mysql:8.0", "mysql:8.4", "mariadb:10.5", "mariadb:10.11", "mariadb:11.4"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: "1.24"
       - name: Start infrastructure
-        run: MYSQL_VERSION=${{ matrix.mysql }} docker compose up -d --wait
+        run: MYSQL_IMAGE=${{ matrix.db }} docker compose up -d --wait
       - run: go test -tags=integration -race -timeout 15m ./mysql/...
       - name: Infrastructure logs
         if: failure()

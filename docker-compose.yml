@@ -66,8 +66,9 @@ services:
   # different implementation with different SQL, and the acceptance suite it has
   # to pass is the same one.
   mysql:
-    # Pinned by CI so the suite runs against every supported major version.
-    image: mysql:${MYSQL_VERSION:-8.0}
+    # Full image reference, pinned by CI so the suite runs against every
+    # supported major version of MySQL and MariaDB alike.
+    image: ${MYSQL_IMAGE:-mysql:8.0}
     command:
       - --max_connections=200
       # The suite writes the same row several times a second for minutes at a

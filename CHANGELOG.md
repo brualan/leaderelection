@@ -6,6 +6,35 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- `IsLeader`, `Fence`, and `Status` read the clock under the mutex now. A
+  caller stalled on the lock was previously judged against a stale timestamp
+  and could be answered "leader" after its deadline had passed.
+- `New` copies `Config.Payload`; mutating the caller's slice after
+  construction no longer changes what the elector publishes.
+- Documented that the next leader's `OnStartedLeading` may overlap the
+  previous one: waiting for the local callback to return is not a global
+  handover barrier. Fencing tokens remain the mechanism that makes overlap
+  safe.
+- Documented the durability precondition behind fencing tokens: a failover
+  to a lagging replica or a restore from an old backup rewinds the fence
+  counter and can reissue a token (`memstore/fencing_rewind_test.go` pins
+  the consequence).
+- `mysql` and `postgres` go.mod files now require a resolvable version of
+  the core module and ship a `go.sum`; previously the modules could not be
+  built outside this workspace at all.
+
+### Added
+
+- CI builds and tests every module with `GOWORK=off`, plus a job compiling a
+  throwaway consumer against the three published modules, so go.mod drift
+  can no longer hide behind the workspace.
+- MariaDB 10.5, 10.11, and 11.4 joined the MySQL integration matrix; the
+  support claim in the README is now backed by CI.
+- Regression tests: `TestLeadershipChecksReadTimeUnderLock`,
+  `TestNewClonesPayload`, `TestNextLeaderDoesNotWaitForPredecessorCallback`.
+
 ### Added
 
 - Offline `SchemaSQL(opts...)` and read-only `Store.CheckSchema(ctx)` for both SQL

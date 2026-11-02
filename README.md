@@ -140,7 +140,11 @@ func main() {
 				// Runs for the whole term, in its own goroutine. The context is
 				// cancelled the instant leadership becomes uncertain -- which
 				// includes the database merely becoming unreachable. Respect it
-				// promptly; nobody else can lead until this returns.
+				// promptly. It bounds how long your work runs after the term
+				// ends, nothing more: once the lease is lost, a participant in
+				// another process can acquire it and start its own callback
+				// while this one is still running. Stamp external writes with
+				// fence and let the receiver reject stale tokens.
 				reconcileUntil(ctx, fence)
 			},
 			OnStoppedLeading: func() {
@@ -184,7 +188,9 @@ store, err := mysql.Connect(ctx, "user:pass@tcp(db:3306)/app")
 
 It works on MySQL 8.0 and later and on MariaDB 10.5 and later, directly or
 through a pooler such as ProxySQL, and it passes the same acceptance suite as
-the PostgreSQL store with no exemptions. Two differences are worth knowing
+the PostgreSQL store with no exemptions. CI runs that suite against MySQL 8.0
+and 8.4 and against MariaDB 10.5, 10.11 and 11.4, each direct and pooled. Two
+differences are worth knowing
 about, and both are in [MySQL](#mysql) below: an operation costs two round trips
 instead of one, and the table stores identities as binary.
 
@@ -350,6 +356,41 @@ participant could re-acquire its own untouched lease and the database would
 have no reason to renumber it. The library gives the lease up instead and takes
 a fresh token, so a write left in flight by the abandoned term can still be
 told apart from the new one's.
+
+### Durability across database failover
+
+All of this rests on one precondition the library cannot enforce: the
+database must never hand back a state older than the one that granted the most
+recent term. The fence counter lives in the same row as the lease, and it only
+climbs because the row remembers it.
+
+Failover breaks that precondition if it is allowed to:
+
+- promoting a **lagging replica** resurrects the lease row as of the last
+  replicated write, rewinding the fence counter;
+- restoring from an **old backup** does the same, worse.
+
+After either one, the next acquire mints a token a past term already used, and
+a receiver guarding writes with `fence <= seen` accepts a stale write. The
+consequence is pinned down by `memstore/fencing_rewind_test.go`.
+
+What this means operationally:
+
+- The lease row must be written durably before it counts: `synchronous_commit`
+  set appropriately for your failover target on PostgreSQL, and
+  `innodb_flush_log_at_trx_commit=1` / `sync_binlog=1` on whatever accepts the
+  writes on MySQL/MariaDB.
+- Fail over only to a replica that has applied every write the old primary
+  acknowledged. With asynchronous replication and a lagging replica, bump the
+  fence by hand (advance the lease row, or delete the election's row) before
+  letting the service rely on the new primary.
+- Restoring a backup rewinds the counter by construction. After any restore
+  that covers the election table, advance the fence (or delete the election's
+  row) before resuming the service.
+
+If none of this can be guaranteed, treat fencing tokens as unreliable across
+database failovers and re-initialise the election state as part of the
+failover procedure.
 
 ## Cross-cluster leader discovery
 

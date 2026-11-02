@@ -43,6 +43,11 @@
 // whether they belong to the same participant or to different ones. Attach the
 // token to external writes and have the receiving system reject anything
 // stamped with one older than the highest it has seen.
+//
+// That claim assumes the database never hands back a state older than the
+// one that granted the most recent term: a failover to a lagging replica, or
+// a restore from an old backup, rewinds the counter and can reissue a token.
+// See the README, "Durability across database failover".
 package leaderelection
 
 import (
@@ -101,6 +106,9 @@ type term struct {
 }
 
 // New validates cfg, fills in defaults, and returns an Elector.
+//
+// New takes ownership of cfg.Payload: it is copied, so the caller may reuse
+// or mutate its own buffer freely afterwards.
 func New(cfg Config) (*Elector, error) {
 	cfg, err := cfg.withDefaults()
 	if err != nil {
@@ -109,6 +117,7 @@ func New(cfg Config) (*Elector, error) {
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
+	cfg.Payload = bytes.Clone(cfg.Payload)
 	return &Elector{cfg: cfg, clock: cfg.clock}, nil
 }
 
@@ -171,19 +180,19 @@ func (e *Elector) Run(ctx context.Context) error {
 // descheduled watchdog goroutine cannot widen the window during which a stale
 // leader believes itself current. When in any doubt it returns false.
 func (e *Elector) IsLeader() bool {
-	now := e.clock.Now()
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.term != nil && e.leadingAtLocked(now)
+	// Read the clock under the lock: a caller stalled on the mutex must be
+	// judged against the moment it actually got in, not an earlier one.
+	return e.term != nil && e.leadingAtLocked(e.clock.Now())
 }
 
 // Fence returns the fence token of the current term, and whether there is one.
 // Use it to stamp writes to systems outside the election.
 func (e *Elector) Fence() (int64, bool) {
-	now := e.clock.Now()
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	if e.term == nil || !e.leadingAtLocked(now) {
+	if e.term == nil || !e.leadingAtLocked(e.clock.Now()) {
 		return 0, false
 	}
 	return e.term.fence, true
@@ -474,9 +483,12 @@ func (e *Elector) stepDown(t *term, reason error) {
 func (e *Elector) endTerm(ctx context.Context, t *term) {
 	e.stepDown(t, nil)
 
-	// Wait for the application to stop doing leader work before anyone else
-	// can start. This is the handover point, and skipping it would make the
-	// election's guarantee meaningless to the code relying on it.
+	// Wait for the application's leader goroutine to return before this
+	// Elector proceeds to a new term or releases the lease. This is a local
+	// ordering only: it says nothing about other processes. The moment the
+	// lease is lost, a participant elsewhere can acquire it and start its own
+	// OnStartedLeading while this one is still running -- which is exactly
+	// why external effects need fencing tokens.
 	<-t.done
 
 	if e.cfg.Callbacks.OnStoppedLeading != nil {

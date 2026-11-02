@@ -50,10 +50,12 @@ type Status struct {
 
 // Status returns a snapshot of the elector's current state.
 func (e *Elector) Status() Status {
-	now := e.clock.Now()
-
 	e.mu.Lock()
 	defer e.mu.Unlock()
+
+	// The clock is read under the lock so IsLeader reflects the instant the
+	// snapshot was taken, not an earlier one.
+	now := e.clock.Now()
 
 	s := Status{
 		Identity: e.cfg.Identity,

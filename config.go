@@ -40,6 +40,11 @@ type Callbacks struct {
 	// believing it is the leader -- including when the database has merely
 	// become unreachable -- so leader-only work must respect it promptly.
 	//
+	// The cancellation bounds how long the work runs after the term ends; it
+	// does not prevent overlap. Once this process loses the lease, a
+	// participant elsewhere acquires it and starts its own callback while
+	// this one may still be running.
+	//
 	// fence is the token for this term. Use it to guard writes to systems that
 	// cannot participate in the election themselves.
 	OnStartedLeading func(ctx context.Context, fence int64)
@@ -78,6 +83,9 @@ type Config struct {
 	// Payload is opaque data published alongside the lease, readable by
 	// followers through [Elector.Status]. A leader typically advertises the
 	// address at which other clusters can reach it. Optional.
+	//
+	// [New] copies the slice: the elector owns its copy, and the caller's
+	// buffer may be reused or mutated after New returns.
 	Payload []byte
 
 	// LeaseDuration is how long a lease stays valid after a successful
