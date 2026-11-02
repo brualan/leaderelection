@@ -44,7 +44,26 @@ that occasionally stops answering.
 
 **At most one participant considers itself the leader at any instant.** That
 holds through network partitions, database outages, connection pooler restarts,
-and processes killed without warning.
+and processes killed without warning — provided four preconditions that the
+library cannot enforce hold:
+
+1. **Failover of the database never hands back a state older than the last
+   confirmed term.** A lagging replica promoted after a partition, or a
+   restore from an old backup, rewinds the fencing counter and voids token
+   uniqueness. See [Durability across database failover](#durability-across-database-failover).
+2. **`SafetyMargin` covers your clock drift and your shutdown latency.**
+   It absorbs the difference in rate between a participant's clock and the
+   database's, plus the time the application needs to notice its context was
+   cancelled.
+3. **Each process incarnation uses a unique `Identity`.** Reusing a stable
+   identity across restarts lets a restarted process renew a lease its own
+   stalled predecessor may still believe it holds.
+4. **Leader work reacts to its context promptly.** Once the lease is lost,
+   the next leader starts while the previous callback may still be running;
+   only fencing tokens keep external effects safe in that window.
+
+Under those preconditions the guarantee is absolute; outside them, no
+lease-based election can promise more.
 
 Three choices carry that weight.
 
@@ -342,7 +361,9 @@ OnStartedLeading: func(ctx context.Context, fence int64) {
 UPDATE state SET value = $1, fence = $2 WHERE id = $3 AND fence <= $2;
 ```
 
-No two terms ever share a token, anywhere in the election.
+No two terms ever share a token, anywhere in the election — as long as the
+database never hands back a state older than the one that granted the most
+recent term (see [Durability across database failover](#durability-across-database-failover)).
 
 At the database level the token advances on one condition: reclaiming an
 expired lease. That covers a new holder taking over, and equally the *previous*

@@ -5,7 +5,7 @@ module github.com/brualan/leaderelection/tests
 go 1.23.0
 
 require (
-	github.com/brualan/leaderelection v0.1.0
+	github.com/brualan/leaderelection v0.6.0
 	github.com/brualan/leaderelection/mysql v0.1.0
 	github.com/brualan/leaderelection/postgres v0.1.0
 	github.com/go-sql-driver/mysql v1.9.3

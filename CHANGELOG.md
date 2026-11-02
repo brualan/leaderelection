@@ -6,6 +6,20 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-02
+
+First version installable as a consumer: the core module and both SQL stores
+are tagged (`v0.6.0`, `mysql/v0.1.0`, `postgres/v0.1.0`) and resolvable
+outside this repository's workspace.
+
+### Changed
+
+- The README's Guarantees section now states the four preconditions the
+  safety guarantee relies on up front (durable database failover, a
+  sufficient `SafetyMargin`, unique `Identity` per incarnation, prompt
+  reaction to the term context), and the fencing-token claim points at the
+  durability section instead of standing unqualified.
+
 ### Fixed
 
 - `IsLeader`, `Fence`, and `Status` read the clock under the mutex now. A

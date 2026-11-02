@@ -10,7 +10,10 @@
 //
 // The guarantee is that at most one participant considers itself leader at any
 // instant, and it survives network partitions, database outages, connection
-// pooler restarts and abrupt process death. It rests on three choices:
+// pooler restarts and abrupt process death. It rests on three choices, and it
+// assumes the preconditions spelled out in the README's Guarantees section
+// (durable database failover, a sufficient SafetyMargin, unique identities,
+// prompt reaction to the term context):
 //
 // Every timestamp comes from the database. Participants in different clusters
 // have unrelated clocks, so a lease expiry expressed as an absolute time would
